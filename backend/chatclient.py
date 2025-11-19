@@ -2,17 +2,30 @@ import socket
 import threading
 import base64, os, hashlib
 
+import pyaudio
+from PyQt5.QtCore import QTimer
+from pygame import time
+
+
 class ChatClient:
-    def __init__(self, host="192.168.56.1", port=2025):
+    def __init__(self, host="127.0.0.1", port=2025, gui_parent=None):
         self.host = host
         self.port = port
         self.sock = None
         self.running = False
         self.on_message = None  # callback: msg từ server
+        self.gui_parent = gui_parent
+
         # -------------------------------
         self.group_unread_count = {}  # {group_name: số tin nhắn chưa đọc}
         self.open_groups = set()      # nhóm đang mở
         self.received_msg_ids = set() # tránh tăng count trùng
+
+        self.call_active = False
+        self.call_target = None
+        self.current_call = None
+
+        self.video_call = None
 
     # ====================== CONNECT ======================
     def connect(self):
@@ -33,6 +46,7 @@ class ChatClient:
         self.send(f"REGISTER|{username}|{password}|{b64_avatar}\n")
 
     def login(self, username, password):
+        # đảm bảo on_message đã gắn trước khi login
         self.send(f"LOGIN|{username}|{password}\n")
 
     # ====================== MESSAGE ======================
@@ -89,10 +103,61 @@ class ChatClient:
         self.send(f"CALL_ACCEPT|{target}\n")
 
     def send_call_stream(self, target, b64_chunk):
-        self.send(f"CALL_STREAM|{target}|{b64_chunk}\n")
+        try:
+            self.send(f"CALL_STREAM|{target}|{b64_chunk}\n")
+        except Exception as e:
+            print("[ChatClient] send_call_stream error:", e)
 
     def send_call_end(self, target):
         self.send(f"CALL_END|{target}\n")
+
+    # inside ChatClient class
+
+    def send_video_request(self, target):
+        """Send VIDEO_REQUEST to target"""
+        try:
+            self.send(f"VIDEO_REQUEST|{target}\n")
+        except Exception as e:
+            # fallback raw send if needed
+            try:
+                self.send_raw(f"VIDEO_REQUEST|{target}\n")
+            except:
+                raise
+
+    def send_video_accept(self, target):
+        try:
+            self.send(f"VIDEO_ACCEPT|{target}\n")
+        except Exception:
+            try:
+                self.send_raw(f"VIDEO_ACCEPT|{target}\n")
+            except:
+                pass
+
+    def send_video_stream(self, target, b64_video, b64_audio=""):
+        """
+        Send VIDEO_STREAM|target|b64_video|b64_audio\n
+        Prefer a helper method that ensures newline is added.
+        """
+        try:
+            # ensure no stray newlines inside b64 by replacing them
+            b64_video = b64_video.replace("\n", "")
+            b64_audio = (b64_audio or "").replace("\n", "")
+            self.send(f"VIDEO_STREAM|{target}|{b64_video}|{b64_audio}\n")
+        except Exception as e:
+            # fallback to raw socket if needed
+            try:
+                self.send_raw(f"VIDEO_STREAM|{target}|{b64_video}|{b64_audio}\n")
+            except:
+                raise
+
+    def send_video_end(self, target):
+        try:
+            self.send(f"VIDEO_END|{target}\n")
+        except Exception:
+            try:
+                self.send_raw(f"VIDEO_END|{target}\n")
+            except:
+                pass
 
     # ====================== GROUP OPEN / UNREAD ======================
     def open_group(self, group_name):
@@ -108,6 +173,32 @@ class ChatClient:
     def get_unread_count(self, group_name):
         return self.group_unread_count.get(group_name, 0)
 
+    def _play_audio_chunk(self, data):
+        """Phát 1 đoạn âm thanh"""
+        p = pyaudio.PyAudio()
+        stream = p.open(format=pyaudio.paInt16, channels=1, rate=16000, output=True)
+        stream.write(data)
+        stream.stop_stream()
+        stream.close()
+        p.terminate()
+
+    # ====================== RAW SEND ======================
+    def send_raw(self, msg: str):
+        """
+        Gửi chuỗi thẳng lên server.
+        Dùng khi bạn muốn gửi lệnh/format tuỳ chỉnh.
+        msg: str, ví dụ 'IMG|target|filename|base64data'
+        """
+        if self.sock and self.running:
+            try:
+                # đảm bảo kết thúc bằng \n để server nhận đúng 1 message
+                if not msg.endswith("\n"):
+                    msg += "\n"
+                self.sock.sendall(msg.encode("utf-8"))
+            except Exception as e:
+                print("❌ Lỗi send_raw:", e)
+                self.close()
+
     # ====================== CORE SOCKET ======================
     def send(self, message):
         if self.sock and self.running:
@@ -117,6 +208,7 @@ class ChatClient:
                 self.close()
 
     def receive_loop(self):
+        """Luồng nhận dữ liệu từ server"""
         buffer = ""
         while self.running:
             try:
@@ -130,15 +222,11 @@ class ChatClient:
                     continue
 
                 buffer += text
-                if "\n" not in buffer:
-                    continue
-
                 while "\n" in buffer:
                     msg, buffer = buffer.split("\n", 1)
                     msg = msg.strip()
-                    if not msg:
-                        continue
-                    self.handle_incoming(msg)
+                    if msg:
+                        self.handle_incoming(msg)
             except Exception as e:
                 print("[RECV ERROR]", e)
                 break
@@ -166,7 +254,57 @@ class ChatClient:
 
         # gửi tới GUI / callback
         if self.on_message:
-            self.on_message(msg)
+            try:
+                self.on_message(msg)
+            except Exception as e:
+                print("[ON_MESSAGE ERROR]", e)
+
+        # --- VOICE (private) ---
+        if cmd == "VOICE":
+            sender = parts[1]
+            filename = parts[2]
+            b64 = parts[3]
+            os.makedirs("received_files", exist_ok=True)
+            filepath = os.path.join("received_files", filename)
+            with open(filepath, "wb") as f:
+                f.write(base64.b64decode(b64))
+            if self.on_message:
+                self.on_message(f"PRIVATE|{sender}|[VOICE]{filepath}")
+
+        elif cmd == "GROUP_VOICE":
+            group_name = parts[1]
+            sender = parts[2]
+            filename = parts[3]
+            b64 = parts[4]
+            os.makedirs(os.path.join("received_files", group_name), exist_ok=True)
+            filepath = os.path.join("received_files", group_name, filename)
+            with open(filepath, "wb") as f:
+                f.write(base64.b64decode(b64))
+            if self.on_message:
+                self.on_message(f"GROUP_MSG|{group_name}|{sender}|[VOICE]{filepath}")
+
+        elif cmd == "CALL_STREAM":
+            sender = parts[1]
+            b64_data = parts[2]
+            if self.current_call:  # chỉ check self.current_call != None
+                self.current_call.receive_audio(b64_data)
+
+        elif cmd == "CALL_ACCEPT":
+            sender = parts[1]
+            print(f"✅ {sender} đã chấp nhận cuộc gọi!")
+            # Xem như chỉ gửi thông báo về GUI
+            if self.on_message:
+                self.on_message(f"CALL_ACCEPT|{sender}")
+
+        elif cmd == "CALL_REQUEST":
+            sender = parts[1]
+            # Không gọi self.on_message ở đây nữa
+            # GUI sẽ nhận thông qua handle_client_message
+
+        elif cmd == "CALL_END":
+            sender = parts[1]
+            print(f"📴 {sender} đã kết thúc cuộc gọi.")
+            self.call_active = False
 
     def close(self):
         self.running = False

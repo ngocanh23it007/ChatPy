@@ -5,23 +5,19 @@ import tkinter as tk
 import base64
 
 import sounddevice as sd
-from scipy.io.wavfile import write
 import tempfile
 import threading
 import numpy as np
 import time
-import io
 import pygame
 import wave
-from VoiceCall import VoiceCall
-from VideoCall import VideoCall
+from app.VoiceCall import VoiceCall
 
 from pathlib import Path
 from tkinter import messagebox, filedialog
 
-from IPython.utils import frame
 from PIL import Image, ImageTk, ImageDraw
-from ChatClient import ChatClient
+from chatclient import ChatClient
 
 
 class ChatGUI:
@@ -1024,7 +1020,7 @@ class ChatGUI:
 
         # Import VoiceCall (file riêng)
         try:
-            from VoiceCall import VoiceCall
+            from app.VoiceCall import VoiceCall
         except ImportError:
             messagebox.showerror("Lỗi", "Không tìm thấy file VoiceCall.py!")
             return
@@ -1058,7 +1054,7 @@ class ChatGUI:
 
         # Import VideoCall (file riêng)
         try:
-            from VideoCall import VideoCall
+            from app.VideoCall import VideoCall
         except ImportError:
             messagebox.showerror("Lỗi", "Không tìm thấy file VideoCall.py!")
             return
@@ -1079,7 +1075,7 @@ class ChatGUI:
 
     def show_video_call_request(self, caller):
         if messagebox.askyesno("Video Call", f"{caller} đang gọi video bạn, chấp nhận?"):
-            from VideoCall import VideoCall
+            from app.VideoCall import VideoCall
             self.video_call = VideoCall(self.client, caller, parent=self.root)
             self.video_call.start()
             # Gửi tín hiệu đồng ý
@@ -1123,7 +1119,7 @@ class ChatGUI:
         if avatar_path and os.path.exists(avatar_path):
             avatar_img = self.create_circle_avatar(avatar_path, size=36)
         else:
-            avatar_img = self.create_circle_avatar("avatars/default.jpg", size=36)
+            avatar_img = self.create_circle_avatar("../avatars/default.jpg", size=36)
 
         # Outer frame cho mỗi tin nhắn
         outer_frame = tk.Frame(frame, bg="#f5f5f5")
@@ -1366,7 +1362,7 @@ class ChatGUI:
             except ValueError:
                 return
 
-            save_dir = Path("downloads")
+            save_dir = Path("../downloads")
             save_dir.mkdir(exist_ok=True)
             save_path = save_dir / filename
 
@@ -1412,7 +1408,7 @@ class ChatGUI:
             # --- Giải mã file ---
             try:
                 data = base64.b64decode(b64_data)
-                save_dir = Path("downloads")
+                save_dir = Path("../downloads")
                 save_dir.mkdir(exist_ok=True)
                 file_path = save_dir / filename
                 with open(file_path, "wb") as f:
@@ -1453,7 +1449,7 @@ class ChatGUI:
             except ValueError:
                 return
 
-            save_dir = Path("downloads")
+            save_dir = Path("../downloads")
             save_dir.mkdir(exist_ok=True)
             save_path = save_dir / filename
 
@@ -1699,7 +1695,7 @@ class ChatGUI:
                 return
             self._shown_messages.add(key)
 
-            save_dir = Path("downloads") / "group_images"
+            save_dir = Path("../downloads") / "group_images"
             save_dir.mkdir(parents=True, exist_ok=True)
             save_path = save_dir / filename
             with open(save_path, "wb") as f:
@@ -1726,7 +1722,7 @@ class ChatGUI:
             except ValueError:
                 return
 
-            save_dir = Path("downloads") / "group_files"
+            save_dir = Path("../downloads") / "group_files"
             save_dir.mkdir(parents=True, exist_ok=True)
             save_path = save_dir / filename
             with open(save_path, "wb") as f:
@@ -1752,7 +1748,7 @@ class ChatGUI:
             except ValueError:
                 return
 
-            save_dir = Path("downloads") / "group_voice"
+            save_dir = Path("../downloads") / "group_voice"
             save_dir.mkdir(parents=True, exist_ok=True)
             save_path = save_dir / filename
             with open(save_path, "wb") as f:

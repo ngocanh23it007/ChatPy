@@ -1,0 +1,313 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ChatWindow</class>
+ <widget class="QMainWindow" name="ChatWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1000</width>
+    <height>600</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Chat Application</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QHBoxLayout" name="mainLayout">
+
+    <!-- ===== Left Panel (Danh sách bạn bè / nhóm) ===== -->
+    <item>
+     <widget class="QFrame" name="leftPanel">
+      <property name="minimumSize">
+       <size>
+        <width>220</width>
+        <height>0</height>
+       </size>
+      </property>
+      <property name="styleSheet">
+       <string notr="true">
+        background-color: #F4F6FA;
+        border-right: 1px solid #CCCCCC;
+       </string>
+      </property>
+      <layout class="QVBoxLayout" name="leftLayout">
+       <item>
+        <widget class="QLabel" name="userLabel">
+         <property name="text">
+          <string>Xin chào, username</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">font-weight: bold; font-size: 14px;</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QListWidget" name="userList">
+         <property name="styleSheet">
+          <string notr="true">
+           QListWidget {
+            background: white;
+            border: none;
+           }
+           QListWidget::item:selected {
+            background-color: #4A90E2;
+            color: white;
+           }
+          </string>
+         </property>
+        </widget>
+       </item>
+       <item>
+           <widget class="QLabel" name="groupLabel">
+               <property name="text"><string>Nhóm</string></property>
+               <property name="alignment">
+                   <set>Qt::AlignCenter</set>
+               </property>
+               <property name="styleSheet">
+                   <string notr="true">font-weight: bold; font-size: 14px;</string>
+               </property>
+           </widget>
+       </item>
+       <item>
+           <widget class="QListWidget" name="groupList">
+               <property name="styleSheet">
+                   <string notr="true">
+                       QListWidget {
+                           background: white;
+                           border: none;
+                       }
+                       QListWidget::item:selected {
+                           background-color: #4A90E2;
+                           color: white;
+                       }
+                   </string>
+               </property>
+           </widget>
+       </item>
+       <item alignment="Qt::AlignHCenter">
+        <widget class="QPushButton" name="btnCreateGroup">
+         <property name="text">
+          <string>+ Tạo nhóm</string>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">
+           QPushButton {
+            background-color: #4CAF50;
+            color: white;
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-weight: bold;
+           }
+           QPushButton:hover {
+            background-color: #45A049;
+           }
+          </string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+
+    <!-- ===== Right Panel (Khu chat) ===== -->
+    <item>
+     <widget class="QFrame" name="chatPanel">
+      <property name="styleSheet">
+       <string notr="true">
+        background-color: #FFFFFF;
+       </string>
+      </property>
+      <layout class="QVBoxLayout" name="chatLayout">
+       <!-- Thanh tiêu đề -->
+       <item>
+        <widget class="QFrame" name="chatHeader">
+         <property name="styleSheet">
+          <string notr="true">
+           background-color: #EAEAEA;
+           padding: 8px;
+           border-bottom: 1px solid #CCCCCC;
+          </string>
+         </property>
+         <layout class="QHBoxLayout" name="headerLayout">
+          <property name="spacing">
+           <number>10</number>
+          </property>
+
+          <!-- Avatar -->
+          <item>
+           <widget class="QLabel" name="chatAvatar">
+            <property name="minimumSize">
+             <size>
+              <width>40</width>
+              <height>40</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>40</width>
+              <height>40</height>
+             </size>
+            </property>
+            <property name="pixmap">
+             <pixmap>:/icons/default_avatar.png</pixmap> <!-- bạn có thể đặt ảnh mặc định -->
+            </property>
+            <property name="scaledContents">
+             <bool>true</bool>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">
+              border-radius: 20px;
+              background-color: #CCCCCC;
+             </string>
+            </property>
+           </widget>
+          </item>
+
+          <!-- Tên user hoặc nhóm -->
+          <item>
+           <widget class="QLabel" name="chatTitle">
+            <property name="text">
+             <string>Chat chung</string>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignVCenter</set>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">
+              font-size: 16px;
+              font-weight: bold;
+             </string>
+            </property>
+           </widget>
+          </item>
+
+          <item>
+           <spacer name="horizontalSpacer">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </widget>
+       </item>
+
+       <!-- Khu hiển thị tin nhắn -->
+       <item>
+        <widget class="QScrollArea" name="scrollArea">
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <widget class="QWidget" name="scrollContent">
+          <layout class="QVBoxLayout" name="chatMessages">
+           <property name="spacing">
+            <number>6</number>
+           </property>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+
+       <!-- Thanh nhập tin nhắn -->
+       <item>
+        <widget class="QFrame" name="inputFrame">
+         <layout class="QHBoxLayout" name="inputLayout">
+          <item>
+           <widget class="QLineEdit" name="messageInput">
+            <property name="placeholderText">
+             <string>Nhập tin nhắn...</string>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">
+              border: 1px solid #CCCCCC;
+              border-radius: 8px;
+              padding: 6px;
+             </string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnImage">
+            <property name="text">
+             <string>🖼️</string>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">
+              QPushButton {
+               background-color: #FFA500;
+               color: white;
+               border-radius: 8px;
+               padding: 6px 12px;
+              }
+              QPushButton:hover {
+               background-color: #FFB733;
+              }
+             </string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnFile">
+            <property name="text">
+             <string>📁</string>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">
+              QPushButton {
+               background-color: #4CAF50;
+               color: white;
+               border-radius: 8px;
+               padding: 6px 12px;
+              }
+              QPushButton:hover {
+               background-color: #45A049;
+              }
+             </string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnVoice">
+            <property name="text">
+             <string>🎤</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnCall">
+            <property name="text">
+             <string>📞</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnVideo">
+            <property name="text">
+             <string>🎥</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+
+      </layout>
+     </widget>
+    </item>
+
+   </layout>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

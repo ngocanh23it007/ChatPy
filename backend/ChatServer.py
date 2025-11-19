@@ -10,7 +10,7 @@ from tkinter.scrolledtext import ScrolledText
 
 HOST = "0.0.0.0"
 PORT = 2025
-AVATAR_DIR = "avatars"
+AVATAR_DIR = "../avatars"
 
 if not os.path.exists(AVATAR_DIR):
     os.makedirs(AVATAR_DIR)
@@ -39,6 +39,8 @@ def send_user_list():
     with clients_lock:
         users = [f"{info['username']}:{info['avatar']}" for info in clients.values()]
         msg = "USER_LIST|" + "|".join(users) + "\n"
+        print("DEBUG send USER_LIST:", msg)
+
         for c in clients.keys():
             try:
                 c.sendall(msg.encode("utf-8"))
@@ -65,7 +67,7 @@ def handle_register(parts, conn):
             with open(avatar_path, "wb") as f:
                 f.write(base64.b64decode(b64_avatar))
         else:
-            avatar_path = "avatars/default.jpg"
+            avatar_path = "../avatars/default.jpg"
 
         cur = get_cursor()
         cur.execute("SELECT * FROM users WHERE username=%s", (username,))
@@ -91,21 +93,38 @@ def handle_login(parts, conn):
         cur = get_cursor()
         cur.execute("SELECT * FROM users WHERE username=%s AND password=%s", (username, password))
         user = cur.fetchone()
-        if user:
-            avatar_path = user.get("avatar") or "avatars/default.jpg"
-            with clients_lock:
-                clients[conn] = {"username": username, "avatar": avatar_path}
-            conn.sendall(f"LOGIN_OK|{avatar_path}\n".encode("utf-8"))
-
-            # gửi danh sách user
-            send_user_list()
-
-            # gửi danh sách nhóm cho user này
-            user_groups = [g for g, mems in groups.items() if username in mems]
-            if user_groups:
-                conn.sendall(f"GROUP_LIST|{'|'.join(user_groups)}\n".encode("utf-8"))
-        else:
+        if not user:
             conn.sendall(b"LOGIN_FAIL\n")
+            return
+
+        avatar_path = user.get("avatar") or "avatars/default.jpg"
+
+        with clients_lock:
+            clients[conn] = {"username": username, "avatar": avatar_path}
+
+        # --- gửi LOGIN_OK cho client mới
+        conn.sendall(f"LOGIN_OK|{avatar_path}\n".encode("utf-8"))
+
+        # --- gửi USER_LIST riêng cho client mới ---
+        users = [f"{info['username']}:{info['avatar']}" for info in clients.values()]
+        conn.sendall(f"USER_LIST|{'|'.join(users)}\n".encode("utf-8"))
+
+        # --- gửi USER_LIST cho tất cả client khác (cập nhật UI) ---
+        # sau khi thêm vào clients
+        with clients_lock:
+            # gửi USER_LIST cho tất cả client, bao gồm cả client mới
+            users = [f"{info['username']}:{info['avatar']}" for info in clients.values()]
+            for c in clients.keys():
+                try:
+                    c.sendall(f"USER_LIST|{'|'.join(users)}\n".encode("utf-8"))
+                except:
+                    pass
+
+        # --- gửi danh sách nhóm cho client mới ---
+        user_groups = [g for g, mems in groups.items() if username in mems]
+        if user_groups:
+            conn.sendall(f"GROUP_LIST|{'|'.join(user_groups)}\n".encode("utf-8"))
+
     except Exception as e:
         conn.sendall(f"ERR|{e}\n".encode("utf-8"))
 
@@ -139,9 +158,14 @@ def handle_msg(parts, conn):
 # ------------------- PRIVATE MESSAGE -------------------
 def handle_private(parts, conn):
     if len(parts) < 3:
+        gui_log("[PRIVATE ERROR] Thiếu tham số: target hoặc text")
         return
+
     target, text = parts[1], parts[2]
-    sender = clients[conn]["username"]
+    sender = clients.get(conn, {}).get("username")
+    if not sender:
+        gui_log("[PRIVATE ERROR] Sender không tồn tại")
+        return
 
     # Tìm target connection
     target_conn = None
@@ -151,23 +175,27 @@ def handle_private(parts, conn):
                 target_conn = c
                 break
 
+    # Gửi tin nhắn tới target nếu đang online
     if target_conn:
-        # Chỉ gửi 1 lần PRIVATE
         try:
             target_conn.sendall(f"PRIVATE|{sender}|{text}\n".encode("utf-8"))
-        except:
-            pass
+        except Exception as e:
+            gui_log(f"[PRIVATE SEND ERROR] {e}")
 
     # Lưu DB
+    # --- Lưu tin nhắn vào database (giữ nguyên bảng cũ) ---
     try:
         cur = get_cursor()
-        cur.execute(
-            "INSERT INTO messages (sender, receiver, msg_type, content) VALUES (%s,%s,'PRIVATE',%s)",
-            (sender, target, text)
-        )
+        # Gộp người nhận và nội dung vào 1 chuỗi
+        content = f"[PRIVATE to {target}] {text}"
+        cur.execute("""
+            INSERT INTO messages (sender, msg_type, content)
+            VALUES (%s, 'TEXT', %s)
+        """, (sender, content))
         db.commit()
-    except:
-        pass
+        gui_log(f"[PRIVATE SAVED] {sender} -> {target}: {text}")
+    except Exception as e:
+        gui_log(f"[DB ERROR PRIVATE] {e}")
 
 # ------------------- IMAGE -------------------
 def handle_image(parts, conn):
@@ -175,6 +203,30 @@ def handle_image(parts, conn):
         return
     target, filename, b64_data = parts[1], parts[2], parts[3]
     sender = clients[conn]["username"]
+
+    # Giải mã dữ liệu ảnh
+    try:
+        binary_data = base64.b64decode(b64_data)
+    except Exception as e:
+        print("[DECODE ERROR IMG]", e)
+        return
+
+    # --- Lưu vào CSDL ---
+    try:
+        cur = get_cursor()
+        if target.upper() == "ALL":
+            cur.execute(
+                "INSERT INTO messages (sender, msg_type, content, filename) VALUES (%s, 'IMAGE', %s, %s)",
+                (sender, binary_data, filename)
+            )
+        else:
+            cur.execute(
+                "INSERT INTO messages (sender, msg_type, content, filename) VALUES (%s, 'IMAGE', %s, %s)",
+                (sender, binary_data, filename)
+            )
+        db.commit()
+    except Exception as e:
+        print("[DB ERROR IMG]", e)
 
     if target.upper() == "ALL":
         # broadcast
@@ -207,6 +259,30 @@ def handle_file(parts, conn):
         return
     target, filename, b64_data = parts[1], parts[2], parts[3]
     sender = clients[conn]["username"]
+
+    # Giải mã file
+    try:
+        binary_data = base64.b64decode(b64_data)
+    except Exception as e:
+        print("[DECODE ERROR FILE]", e)
+        return
+
+    # --- Lưu vào CSDL ---
+    try:
+        cur = get_cursor()
+        if target.upper() == "ALL":
+            cur.execute(
+                "INSERT INTO messages (sender, msg_type, content, filename) VALUES (%s, 'FILE', %s, %s)",
+                (sender, binary_data, filename)
+            )
+        else:
+            cur.execute(
+                "INSERT INTO messages (sender, msg_type, content, filename) VALUES (%s, 'FILE', %s, %s)",
+                (sender, binary_data, filename)
+            )
+        db.commit()
+    except Exception as e:
+        print("[DB ERROR FILE]", e)
 
     if target.upper() == "ALL":
         with clients_lock:
@@ -268,6 +344,9 @@ def handle_call_request(parts, conn):
     target = parts[1]
     sender = clients[conn]["username"]
     target_conn = None
+
+    print(f"[CALL_REQUEST] {sender} -> {target}")
+
     with clients_lock:
         for c, info in clients.items():
             if info["username"] == target:
@@ -285,6 +364,9 @@ def handle_call_accept(parts, conn):
     target = parts[1]
     sender = clients[conn]["username"]
     target_conn = None
+
+    print(f"[CALL_ACCEPT] {sender} -> {target}")   # <-- thêm ở đây
+
     with clients_lock:
         for c, info in clients.items():
             if info["username"] == target:
@@ -302,19 +384,35 @@ def handle_call_stream(parts, conn):
         return
     target = parts[1]
     b64 = parts[2]
-    sender = clients[conn]["username"]
+    sender = clients.get(conn, {}).get("username", "unknown")
+    print(f"[CALL_STREAM] {sender} -> {target} size={len(b64)}")  # <-- thêm ở đây
+
     target_conn = None
     with clients_lock:
-        for c, info in clients.items():
+        for c, info in list(clients.items()):
             if info["username"] == target:
                 target_conn = c
                 break
-    if target_conn:
-        try:
-            # forward: CALL_STREAM|sender|b64
-            target_conn.sendall(f"CALL_STREAM|{sender}|{b64}\n".encode("utf-8"))
-        except:
-            pass
+
+    if not target_conn:
+        # target offline -> ignore
+        return
+
+    try:
+        # forward: CALL_STREAM|sender|b64
+        # note: sendall có thể ném BrokenPipeError/ConnectionResetError
+        target_conn.sendall(f"CALL_STREAM|{sender}|{b64}\n".encode("utf-8"))
+    except (ConnectionResetError, BrokenPipeError) as e:
+        print(f"[CALL_STREAM] connection lost to {target}; removing client. err={e}")
+        gui_log(f"[CALL_STREAM] connection lost to {target}; removing client.")
+        with clients_lock:
+            if target_conn in clients:
+                del clients[target_conn]
+                send_user_list()
+    except Exception as e:
+        # log other exceptions
+        print("[CALL_STREAM ERROR]", repr(e))
+        gui_log(f"[CALL_STREAM ERROR] {e}")
 
 def handle_call_end(parts, conn):
     if len(parts) < 2:
@@ -602,6 +700,17 @@ def handle_group_image(parts, conn):
     group_name, filename, b64_data = parts[1], parts[2], parts[3]
     sender = clients[conn]["username"]
 
+    try:
+        binary_data = base64.b64decode(b64_data)
+        cur = get_cursor()
+        cur.execute(
+            "INSERT INTO group_messages (group_name, sender, message) VALUES (%s, %s, %s)",
+            (group_name, sender, f"[IMAGE]{filename}")
+        )
+        db.commit()
+    except Exception as e:
+        print("[DB ERROR GROUP_IMG]", e)
+
     if group_name not in groups:
         conn.sendall(f"ERR|Nhóm {group_name} không tồn tại\n".encode())
         return
@@ -621,6 +730,17 @@ def handle_group_file(parts, conn):
         return
     group_name, filename, b64_data = parts[1], parts[2], parts[3]
     sender = clients[conn]["username"]
+
+    try:
+        binary_data = base64.b64decode(b64_data)
+        cur = get_cursor()
+        cur.execute(
+            "INSERT INTO group_messages (group_name, sender, message) VALUES (%s, %s, %s)",
+            (group_name, sender, f"[FILE]{filename}")
+        )
+        db.commit()
+    except Exception as e:
+        print("[DB ERROR GROUP_FILE]", e)
 
     if group_name not in groups:
         conn.sendall(f"ERR|Nhóm {group_name} không tồn tại\n".encode())
@@ -685,10 +805,16 @@ def handle_client(conn, addr):
                 # Chỉ tách 2 phần đầu để giữ nguyên base64 (cho tất cả loại lệnh)
                 if line.startswith(("GROUP_IMG|", "GROUP_FILE|", "GROUP_VOICE|")):
                     parts = line.split("|", 4)
+
                 elif line.startswith(("IMG|", "FILE|", "VOICE|")):
                     parts = line.split("|", 3)
+
+                elif line.startswith("CALL_STREAM|"):
+                    parts = line.split("|", 2)
+
                 else:
                     parts = line.split("|")
+
 
                 if len(parts) == 0 or parts[0] == "":
                     continue
@@ -775,6 +901,7 @@ def stop_server():
 def start_server():
     global server_socket
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # <-- add this
     server_socket.bind((HOST, PORT))
     server_socket.listen(5)
     print(f"[STARTED] Server running on {HOST}:{PORT}")
