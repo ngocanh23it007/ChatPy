@@ -34,23 +34,35 @@ db = pymysql.connect(
 def get_cursor():
     return db.cursor()
 
-# ------------------- GỬI DANH SÁCH USER ONLINE -------------------
+# ------------------- GỬI DANH SÁCH USER ONLINE + TẤT CẢ USER TỪ DB -------------------
 def send_user_list():
     with clients_lock:
-        users = [f"{info['username']}:{info['avatar']}" for info in clients.values()]
-        msg = "USER_LIST|" + "|".join(users) + "\n"
-        print("DEBUG send USER_LIST:", msg)
+        online_users = {info['username'] for info in clients.values()}
 
-        for c in clients.keys():
+    # Lấy tất cả user từ DB
+    try:
+        cur = get_cursor()
+        cur.execute("SELECT username, avatar FROM users")
+        rows = cur.fetchall()
+        all_users = [(r['username'], r.get('avatar') or 'avatars/default.jpg') for r in rows]
+    except Exception as e:
+        print("[DB ERROR] Không thể lấy danh sách user:", e)
+        return
+
+    # Gửi ALL_USERS tới tất cả client
+    msg_all = "ALL_USERS|" + "|".join(f"{u}:{a}" for u, a in all_users) + "\n"
+    with clients_lock:
+        for c in list(clients.keys()):
             try:
-                c.sendall(msg.encode("utf-8"))
+                c.sendall(msg_all.encode("utf-8"))
             except:
                 pass
 
-        # --- Cập nhật Listbox GUI ---
-        user_listbox.delete(0, tk.END)
-        for info in clients.values():
-            user_listbox.insert(tk.END, info['username'])
+    # Cập nhật GUI server
+    user_listbox.delete(0, tk.END)
+    for username, avatar in all_users:
+        status = "🟢" if username in online_users else "⚪"  # 🟢 online, ⚪ offline
+        user_listbox.insert(tk.END, f"{status} {username}")
 
 # ------------------- REGISTER -------------------
 def handle_register(parts, conn):
@@ -104,6 +116,9 @@ def handle_login(parts, conn):
 
         # --- gửi LOGIN_OK cho client mới
         conn.sendall(f"LOGIN_OK|{avatar_path}\n".encode("utf-8"))
+
+        # Gửi danh sách tất cả user từ DB + trạng thái online
+        send_user_list()
 
         # --- gửi USER_LIST riêng cho client mới ---
         users = [f"{info['username']}:{info['avatar']}" for info in clients.values()]

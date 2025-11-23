@@ -16,7 +16,10 @@ class ChatClient:
         self.on_message = None  # callback: msg từ server
         self.gui_parent = gui_parent
 
-        # -------------------------------
+        self.all_users = {}       # username -> avatar_path
+        self.online_users = set() # username đang online
+
+# -------------------------------
         self.group_unread_count = {}  # {group_name: số tin nhắn chưa đọc}
         self.open_groups = set()      # nhóm đang mở
         self.received_msg_ids = set() # tránh tăng count trùng
@@ -207,6 +210,12 @@ class ChatClient:
             except:
                 self.close()
 
+    def request_user_list(self):
+        try:
+            self.send_raw("REQUEST_USER_LIST|")
+        except Exception as e:
+            print("❌ Không thể yêu cầu danh sách user:", e)
+
     def receive_loop(self):
         """Luồng nhận dữ liệu từ server"""
         buffer = ""
@@ -305,6 +314,21 @@ class ChatClient:
             sender = parts[1]
             print(f"📴 {sender} đã kết thúc cuộc gọi.")
             self.call_active = False
+
+        elif cmd == "ALL_USERS":
+            # Xóa danh sách cũ
+            self.all_users.clear()
+            self.online_users.clear()
+
+            for part in parts[1:]:
+                if ":" in part:
+                    username, avatar = part.split(":", 1)
+                    self.all_users[username] = avatar
+                    self.online_users.add(username)  # trạng thái online
+
+            # Gọi callback GUI nếu có
+            if self.on_message:
+                self.on_message(msg)
 
     def close(self):
         self.running = False

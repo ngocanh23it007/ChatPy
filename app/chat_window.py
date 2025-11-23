@@ -1,6 +1,5 @@
 import base64, os
 from PyQt5 import QtWidgets, QtCore
-
 from backend.chatclient import ChatClient
 from ui.chat_window import Ui_ChatWindow
 from PyQt5.QtGui import QIcon, QPixmap, QPainter, QBrush, QPen
@@ -32,6 +31,8 @@ class BadgeDelegate(QStyledItemDelegate):
     def __init__(self, unread_dict, parent=None):
         super().__init__(parent)
         self.unread = unread_dict  # dict lưu số tin nhắn chưa đọc
+        self.all_users = {}  # lưu tất cả user: username -> avatar
+        self.online_users = set()  # lưu username online
 
     def paint(self, painter, option, index):
         # vẽ item mặc định (text, icon)
@@ -104,6 +105,8 @@ class ChatWindow(QtWidgets.QMainWindow):
 
         self.setup_signals()
 
+        self.load_users_from_db()
+
         # Tạo delegate
         self.user_delegate = BadgeDelegate(self.unread_counts, self.ui.userList)
         self.group_delegate = BadgeDelegate(self.unread_counts, self.ui.groupList)
@@ -132,6 +135,9 @@ class ChatWindow(QtWidgets.QMainWindow):
 
         self.current_call = None
 
+        self.all_users = {}  # username -> avatar
+        self.online_users = set()  # danh sách username online
+
         self.incoming_video_signal.connect(self.show_incoming_video_popup)
 
     # ------------------- Signal và sự kiện nút -------------------
@@ -148,7 +154,6 @@ class ChatWindow(QtWidgets.QMainWindow):
         self.ui.userList.itemClicked.connect(self.on_user_selected)
         self.ui.groupList.itemClicked.connect(self.on_group_selected)
 
-
     # ------------------- Nhận dữ liệu từ client -------------------
     def handle_client_message(self, msg):
         parts = msg.split("|")
@@ -156,21 +161,34 @@ class ChatWindow(QtWidgets.QMainWindow):
 
         if msg.startswith("USER_LIST|"):
             parts = msg[len("USER_LIST|"):].split("|")
-            users_with_avatar = []
+            self.online_users = set()
             for p in parts:
-                if not p.strip():
-                    continue
                 if ":" in p:
                     username, avatar = p.split(":", 1)
                 else:
-                    username, avatar = p, ""
+                    username, avatar = p, "avatars/default.jpg"
+
                 if not avatar:
                     avatar = "avatars/default.jpg"
-                if username != self.username:
-                    users_with_avatar.append(f"{username}:{avatar}")
-                # Lưu avatar
-                self.avatars[username] = avatar
-            self.update_users_signal.emit(users_with_avatar)
+
+                self.all_users[username] = avatar  # vẫn lưu vào all_users
+                self.online_users.add(username)
+
+            # Gọi cập nhật giao diện
+            self.update_user_list()
+
+        elif msg.startswith("ALL_USERS|"):
+            parts = msg[len("ALL_USERS|"):].split("|")
+            for p in parts:
+                if ":" in p:
+                    username, avatar = p.split(":", 1)
+                else:
+                    username, avatar = p, "avatars/default.jpg"
+                if not avatar:
+                    avatar = "avatars/default.jpg"
+                self.all_users[username] = avatar  # lưu tất cả user
+            # sau khi cập nhật all_users, gọi update_user_list
+            self.update_user_list()
 
         elif msg.startswith("GROUP_LIST|"):
             parts = msg[len("GROUP_LIST|"):].split("|")
@@ -375,7 +393,7 @@ class ChatWindow(QtWidgets.QMainWindow):
             self.conversations[target] = []
         self.conversations[target].append((sender, message))
 
-        current_target = self.get_current_target()
+        current_target = getattr(self, 'current_chat_user', None)
         if current_target == target:
             self.refresh_chat_display(target)
             self.unread_counts[target] = 0
@@ -387,6 +405,7 @@ class ChatWindow(QtWidgets.QMainWindow):
             self.ui.userList.viewport().update()
             self.ui.groupList.viewport().update()
 
+    
     # ------------------- Hiển thị MessageBox -------------------
     def show_message_box(self, type_, title, text):
         if type_ == "info":
@@ -394,51 +413,67 @@ class ChatWindow(QtWidgets.QMainWindow):
         elif type_ == "warn":
             QtWidgets.QMessageBox.warning(self, title, text)
 
+    def load_users_from_db(self):
+        """
+        Yêu cầu server gửi danh sách user.
+        Server trả về USER_LIST|username:avatar|... và handle_client_message
+        sẽ cập nhật userList, avatar và online status.
+        """
+        if self.client:
+            try:
+                # Gửi yêu cầu danh sách user tới server
+                self.client.request_user_list()
+            except Exception as e:
+                print("❌ Lỗi khi yêu cầu danh sách user từ server:", e)
+
     # ------------------- Cập nhật danh sách user -------------------
-    def update_user_list(self, users):
+    def update_user_list(self):
         self.ui.userList.clear()
         self.ui.userList.setIconSize(QtCore.QSize(40, 40))
         self.ui.userList.setSpacing(5)
 
-        for u in users:
-            if u.strip():
-                if ":" in u:
-                    username, avatar_path = u.split(":", 1)
-                else:
-                    username, avatar_path = u, "avatars/default.jpg"
+        for username, avatar_path in self.all_users.items():
+            if username == self.username:
+                continue  # bỏ qua bản thân
 
-                item = QtWidgets.QListWidgetItem(username)
-                item.setSizeHint(QtCore.QSize(200, 50))
+            item = QtWidgets.QListWidgetItem(username)
+            item.setSizeHint(QtCore.QSize(200, 50))
+            item.setData(Qt.UserRole, username)
 
-                # Lưu key thực sự
-                item.setData(Qt.UserRole, username)
+            if not avatar_path or not os.path.exists(avatar_path):
+                avatar_path = "avatars/default.jpg"
+            self.avatars[username] = avatar_path
 
-                # Xử lý avatar
-                if not avatar_path or not os.path.exists(avatar_path):
-                    avatar_path = "avatars/default.jpg"
-                self.avatars[username] = avatar_path
+            pixmap = QPixmap(avatar_path).scaled(40, 40, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+            size = min(pixmap.width(), pixmap.height())
+            rounded = QPixmap(size, size)
+            rounded.fill(Qt.transparent)
 
-                pixmap = QPixmap(avatar_path).scaled(40, 40, QtCore.Qt.KeepAspectRatioByExpanding, QtCore.Qt.SmoothTransformation)
-                # Avatar tròn
-                size = min(pixmap.width(), pixmap.height())
-                rounded = QPixmap(size, size)
-                rounded.fill(QtCore.Qt.transparent)
-                painter = QPainter(rounded)
-                painter.setRenderHint(QPainter.Antialiasing)
-                path = QtCore.QRect(0, 0, size, size)
-                painter.setBrush(QBrush(pixmap))
-                painter.setPen(QPen(QtCore.Qt.transparent))
-                painter.drawEllipse(path)
-                painter.end()
+            painter = QPainter(rounded)
+            painter.setRenderHint(QPainter.Antialiasing)
+            painter.setBrush(QBrush(pixmap))
+            painter.setPen(Qt.NoPen)
+            painter.drawEllipse(0, 0, size, size)
 
-                icon = QIcon(rounded)
-                item.setIcon(icon)
+            # Vẽ chấm trạng thái
+            dot_size = 10
+            dot_x = size - dot_size - 2
+            dot_y = size - dot_size - 2
 
-                self.ui.userList.addItem(item)
+            if username in self.online_users:
+                painter.setBrush(QBrush(Qt.green))
+            else:
+                painter.setBrush(QBrush(Qt.gray))  # offline màu xám
 
-        # repaint để badge hiển thị
+            painter.setPen(Qt.NoPen)
+            painter.drawEllipse(dot_x, dot_y, dot_size, dot_size)
+
+            painter.end()
+            item.setIcon(QIcon(rounded))
+            self.ui.userList.addItem(item)
+
+        # repaint để badge hiển thị đúng
         self.ui.userList.viewport().update()
-
 
     def update_group_list(self, groups):
         self.ui.groupList.clear()
@@ -698,26 +733,27 @@ class ChatWindow(QtWidgets.QMainWindow):
         text = self.ui.messageInput.text().strip()
         if not text:
             return
-        target = self.get_current_target()
+
+        # SỬ DỤNG current_chat_user thay vì get_current_target()
+        target = getattr(self, 'current_chat_user', 'public')
+
         self.store_message_signal(target, self.username, text)
 
         if self.client:
             try:
-                # Gửi nhóm
-                if target in [self.ui.groupList.item(i).text().split(" (")[0] for i in range(self.ui.groupList.count())]:
+                group_names = [self.ui.groupList.item(i).text().split(" (")[0] for i in range(self.ui.groupList.count())]
+                user_names = [self.ui.userList.item(i).text().split(" (")[0] for i in range(self.ui.userList.count())]
+
+                if target in group_names:
                     self.client.send_group_message(target, text)
-                # Gửi riêng
-                elif target in [self.ui.userList.item(i).text().split(" (")[0] for i in range(self.ui.userList.count())]:
-                    # Lưu target thực sự để xử lý khi server trả về
-                    self.client.last_private_target = target
+                elif target in user_names:
                     self.client.send_private_message(target, text)
-                else:  # Gửi public
+                else:
                     self.client.send_message(text)
             except Exception as e:
                 print("❌ Lỗi gửi tin nhắn:", e)
 
         self.ui.messageInput.clear()
-
 
     # ------------------- Gửi tin nhắn hệ thống -------------------
     def send_message(self, msg):
