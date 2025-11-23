@@ -1,5 +1,5 @@
 import base64, os
-from PyQt5 import QtWidgets, QtCore
+from PyQt5 import QtWidgets, QtCore, QtGui
 from backend.chatclient import ChatClient
 from ui.chat_window import Ui_ChatWindow
 from PyQt5.QtGui import QIcon, QPixmap, QPainter, QBrush, QPen
@@ -148,6 +148,7 @@ class ChatWindow(QtWidgets.QMainWindow):
         self.ui.btnVoice.clicked.connect(self.send_voice)
         self.ui.btnCall.clicked.connect(self.start_voice_call)
         self.ui.btnVideo.clicked.connect(self.start_video_call)
+        self.ui.btnLeaveGroup.clicked.connect(self.leave_group)
         self.ui.messageInput.returnPressed.connect(self.send_text_message)
 
         # Khi chọn user hoặc group, refresh chat
@@ -405,7 +406,67 @@ class ChatWindow(QtWidgets.QMainWindow):
             self.ui.userList.viewport().update()
             self.ui.groupList.viewport().update()
 
-    
+    def update_chat_header(self, target, is_group=False):
+        # --- Tăng cỡ chữ ---
+        font = QFont("Segoe UI", 20, QFont.Bold)
+        self.ui.chatTitle.setFont(font)
+
+        # --- Trường hợp "chat chung" ---
+        if target.lower() == "chat chung":
+            self.ui.chatTitle.setText("Chat chung")
+            self.ui.chatAvatar.setVisible(False)
+            return
+        else:
+            self.ui.chatTitle.setText(target)
+            self.ui.chatAvatar.setVisible(True)
+
+        # --- Xác định avatar ---
+        if is_group:
+            avatar_path = "avatars/group_default.jpg"
+        else:
+            avatar_path = self.avatars.get(target, "avatars/default.jpg")
+
+        if not os.path.exists(avatar_path):
+            avatar_path = "avatars/default.jpg"
+
+        pixmap = QPixmap(avatar_path)
+        if pixmap.isNull():
+            pixmap = QPixmap("avatars/default.jpg")
+
+        # --- Resize avatar ---
+        avatar_size = 60
+        pixmap = pixmap.scaled(avatar_size, avatar_size, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+
+        # --- Tạo QPixmap tròn, **không cần background QLabel** ---
+        rounded = QPixmap(avatar_size, avatar_size)
+        rounded.fill(Qt.transparent)
+
+        painter = QPainter(rounded)
+        painter.setRenderHint(QPainter.Antialiasing)
+        path = QtGui.QPainterPath()
+        path.addEllipse(0, 0, avatar_size, avatar_size)
+        painter.setClipPath(path)
+        painter.drawPixmap(0, 0, pixmap)
+
+        # --- Vẽ chấm online/offline nếu là user ---
+        if not is_group:
+            dot_size = 10
+            dot_x = avatar_size - dot_size - 2
+            dot_y = avatar_size - dot_size - 2
+            if target in self.online_users:
+                painter.setBrush(QBrush(Qt.green))
+            else:
+                painter.setBrush(QBrush(Qt.gray))
+            painter.setPen(Qt.NoPen)
+            painter.drawEllipse(dot_x, dot_y, dot_size, dot_size)
+
+        painter.end()
+        self.ui.chatAvatar.setPixmap(rounded)
+
+        # --- Bỏ background QLabel nếu còn ---
+        self.ui.chatAvatar.setStyleSheet("background: transparent;")
+
+
     # ------------------- Hiển thị MessageBox -------------------
     def show_message_box(self, type_, title, text):
         if type_ == "info":
@@ -507,25 +568,39 @@ class ChatWindow(QtWidgets.QMainWindow):
 
     # ------------------- Khi chọn user -------------------
     def on_user_selected(self, item):
-        self.ui.groupList.clearSelection()
-        target = item.text().split(" (")[0]
-        self.current_chat_user = target
-        # reset số tin nhắn chưa đọc
-        self.unread_counts[target] = 0
-        self.refresh_chat_display(target)
-        # repaint list để badge biến mất
-        self.ui.userList.viewport().update()
-        self.ui.groupList.viewport().update()
+            print("CLICK USER:", item.text())
+            self.ui.groupList.clearSelection()
+            target = item.text().split(" (")[0]
+            self.current_chat_user = target
+            self.unread_counts[target] = 0
+            self.refresh_chat_display(target)
+            self.update_chat_header(target, is_group=False)
+            self.ui.userList.viewport().update()
+            self.ui.groupList.viewport().update()
 
+            self.ui.btnCall.show()
+            self.ui.btnVideo.show()
+            self.ui.btnLeaveGroup.hide()  # ẩn nút rời nhóm
+            self.ui.userList.viewport().update()
+            self.ui.groupList.viewport().update()
     # ------------------- Khi chọn group -------------------
     def on_group_selected(self, item):
+        print("CLICK GROUP:", item.text())
         self.ui.userList.clearSelection()
         target = item.text().split(" (")[0]
         self.current_chat_user = target
         # reset số tin nhắn chưa đọc
         self.unread_counts[target] = 0
         self.refresh_chat_display(target)
+        self.update_chat_header(target, is_group=True)  # cập nhật header
         # repaint list để badge biến mất
+        self.ui.userList.viewport().update()
+        self.ui.groupList.viewport().update()
+
+        # Ẩn/hiện nút
+        self.ui.btnCall.hide()
+        self.ui.btnVideo.hide()
+        self.ui.btnLeaveGroup.show()  # chỉ hiện khi click vào nhóm
         self.ui.userList.viewport().update()
         self.ui.groupList.viewport().update()
 
@@ -710,16 +785,30 @@ class ChatWindow(QtWidgets.QMainWindow):
                 h_layout.addWidget(label)
                 h_layout.addWidget(avatar_label)
             else:
+                # Đổi màu nền cho người khác
                 label.setStyleSheet("""
-                        background-color:#EDEDED;
-                        padding:10px 14px;
-                        border-radius:10px;
-                        font-size:20px;
-                        line-height:1.4;
-                        font-family:'Segoe UI', 'Arial';
-                    """)
+                    background-color:#EDEDED;
+                    padding:10px 14px;
+                    border-radius:10px;
+                    font-size:20px;
+                    line-height:1.4;
+                    font-family:'Segoe UI', 'Arial';
+                """)
+
+                # Tạo layout dọc cho tên sender + nội dung tin nhắn
+                v_layout = QVBoxLayout()
+                v_layout.setSpacing(2)
+                v_layout.setContentsMargins(0,0,0,0)
+
+                # Hiển thị tên sender
+                name_label = QLabel(sender)
+                name_label.setStyleSheet("font-size:12px; color:#555555;")
+                name_label.setAlignment(Qt.AlignLeft)
+                v_layout.addWidget(name_label)
+                v_layout.addWidget(label)
+
                 h_layout.addWidget(avatar_label)
-                h_layout.addWidget(label)
+                h_layout.addLayout(v_layout)
                 h_layout.addStretch()
 
             layout.addWidget(wrapper, alignment=QtCore.Qt.AlignTop)
@@ -1028,3 +1117,40 @@ class ChatWindow(QtWidgets.QMainWindow):
 
         ok_btn.clicked.connect(on_ok)
         dialog.exec_()
+
+    def leave_group(self):
+        target = getattr(self, 'current_chat_user', None)
+        if not target:
+            return
+        reply = QMessageBox.question(
+            self,
+            "Rời nhóm",
+            f"Bạn có chắc muốn rời nhóm '{target}'?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if reply == QMessageBox.Yes and self.client:
+            try:
+                # Gửi thông báo hệ thống đến nhóm trước khi rời
+                system_msg = f"'{self.username}' đã rời nhóm."
+                self.store_message_signal(target, "Hệ thống", system_msg)
+                if self.client:
+                    # Gửi tin nhắn hệ thống tới server để broadcast cho group
+                    self.client.send_group_message(target, system_msg)
+
+                # Gửi lệnh rời nhóm
+                self.client.send_group_leave(target)
+
+                QMessageBox.information(self, "Rời nhóm", f"Bạn đã rời nhóm '{target}'")
+
+                # Xóa khỏi giao diện
+                for i in range(self.ui.groupList.count()):
+                    if self.ui.groupList.item(i).text().split(" (")[0] == target:
+                        self.ui.groupList.takeItem(i)
+                        break
+
+                self.current_chat_user = None
+                self.ui.btnLeaveGroup.hide()
+                self.ui.chatTitle.setText("Chat chung")
+                self.ui.chatAvatar.setVisible(False)
+            except Exception as e:
+                QMessageBox.warning(self, "Lỗi", f"Không thể rời nhóm: {e}")

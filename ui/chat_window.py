@@ -20,7 +20,8 @@ class Ui_ChatWindow(object):
         self.mainLayout = QtWidgets.QHBoxLayout(self.centralwidget)
         self.mainLayout.setObjectName("mainLayout")
         self.leftPanel = QtWidgets.QFrame(self.centralwidget)
-        self.leftPanel.setMinimumSize(QtCore.QSize(220, 0))
+        self.leftPanel.setMinimumSize(QtCore.QSize(220, 20))
+        self.leftPanel.setMaximumSize(QtCore.QSize(220, 16777215))
         self.leftPanel.setStyleSheet("\n"
 "        background-color: #F4F6FA;\n"
 "        border-right: 1px solid #CCCCCC;\n"
@@ -87,16 +88,59 @@ class Ui_ChatWindow(object):
         self.chatPanel.setObjectName("chatPanel")
         self.chatLayout = QtWidgets.QVBoxLayout(self.chatPanel)
         self.chatLayout.setObjectName("chatLayout")
-        self.chatTitle = QtWidgets.QLabel(self.chatPanel)
-        self.chatTitle.setAlignment(QtCore.Qt.AlignCenter)
-        self.chatTitle.setStyleSheet("\n"
-"           font-size: 16px;\n"
-"           font-weight: bold;\n"
+        self.chatHeader = QtWidgets.QFrame(self.chatPanel)
+        self.chatHeader.setStyleSheet("\n"
 "           background-color: #EAEAEA;\n"
 "           padding: 8px;\n"
 "          ")
+        self.chatHeader.setObjectName("chatHeader")
+        self.headerLayout = QtWidgets.QHBoxLayout(self.chatHeader)
+        self.headerLayout.setSpacing(10)
+        self.headerLayout.setObjectName("headerLayout")
+        self.leftHeaderLayout = QtWidgets.QHBoxLayout()
+        self.leftHeaderLayout.setSpacing(10)
+        self.leftHeaderLayout.setObjectName("leftHeaderLayout")
+        self.chatAvatar = QtWidgets.QLabel(self.chatHeader)
+        self.chatAvatar.setMinimumSize(QtCore.QSize(60, 60))
+        self.chatAvatar.setMaximumSize(QtCore.QSize(60, 60))
+        self.chatAvatar.setScaledContents(True)
+        self.chatAvatar.setStyleSheet("border-radius: 30px;")
+        self.chatAvatar.setObjectName("chatAvatar")
+        self.leftHeaderLayout.addWidget(self.chatAvatar)
+        self.chatTitle = QtWidgets.QLabel(self.chatHeader)
+        self.chatTitle.setAlignment(QtCore.Qt.AlignVCenter)
+        self.chatTitle.setStyleSheet("font-size: 20px; font-weight: bold;")
         self.chatTitle.setObjectName("chatTitle")
-        self.chatLayout.addWidget(self.chatTitle)
+        self.leftHeaderLayout.addWidget(self.chatTitle)
+        self.headerLayout.addLayout(self.leftHeaderLayout)
+        spacerItem = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
+        self.headerLayout.addItem(spacerItem)
+        self.rightHeaderLayout = QtWidgets.QHBoxLayout()
+        self.rightHeaderLayout.setSpacing(8)
+        self.rightHeaderLayout.setObjectName("rightHeaderLayout")
+        self.btnCall = QtWidgets.QPushButton(self.chatHeader)
+        self.btnCall.setStyleSheet("\n"
+"                QPushButton { background-color: #4CAF50; color: white; border-radius: 8px; padding: 4px 8px; }\n"
+"                QPushButton:hover { background-color: #45A049; }\n"
+"               ")
+        self.btnCall.setObjectName("btnCall")
+        self.rightHeaderLayout.addWidget(self.btnCall)
+        self.btnVideo = QtWidgets.QPushButton(self.chatHeader)
+        self.btnVideo.setStyleSheet("\n"
+"                QPushButton { background-color: #2196F3; color: white; border-radius: 8px; padding: 4px 8px; }\n"
+"                QPushButton:hover { background-color: #1976D2; }\n"
+"               ")
+        self.btnVideo.setObjectName("btnVideo")
+        self.rightHeaderLayout.addWidget(self.btnVideo)
+        self.btnLeaveGroup = QtWidgets.QPushButton(self.chatHeader)
+        self.btnLeaveGroup.setStyleSheet("\n"
+"                QPushButton { background-color: #f44336; color: white; border-radius: 8px; padding: 4px 8px; }\n"
+"                QPushButton:hover { background-color: #d32f2f; }\n"
+"               ")
+        self.btnLeaveGroup.setObjectName("btnLeaveGroup")
+        self.rightHeaderLayout.addWidget(self.btnLeaveGroup)
+        self.headerLayout.addLayout(self.rightHeaderLayout)
+        self.chatLayout.addWidget(self.chatHeader)
         self.scrollArea = QtWidgets.QScrollArea(self.chatPanel)
         self.scrollArea.setWidgetResizable(True)
         self.scrollArea.setObjectName("scrollArea")
@@ -150,12 +194,6 @@ class Ui_ChatWindow(object):
         self.btnVoice = QtWidgets.QPushButton(self.inputFrame)
         self.btnVoice.setObjectName("btnVoice")
         self.inputLayout.addWidget(self.btnVoice)
-        self.btnCall = QtWidgets.QPushButton(self.inputFrame)
-        self.btnCall.setObjectName("btnCall")
-        self.inputLayout.addWidget(self.btnCall)
-        self.btnVideo = QtWidgets.QPushButton(self.inputFrame)
-        self.btnVideo.setObjectName("btnVideo")
-        self.inputLayout.addWidget(self.btnVideo)
         self.chatLayout.addWidget(self.inputFrame)
         self.mainLayout.addWidget(self.chatPanel)
         ChatWindow.setCentralWidget(self.centralwidget)
@@ -170,19 +208,10 @@ class Ui_ChatWindow(object):
         self.groupLabel.setText(_translate("ChatWindow", "Nhóm"))
         self.btnCreateGroup.setText(_translate("ChatWindow", "+ Tạo nhóm"))
         self.chatTitle.setText(_translate("ChatWindow", "Chat chung"))
+        self.btnCall.setText(_translate("ChatWindow", "📞"))
+        self.btnVideo.setText(_translate("ChatWindow", "🎥"))
+        self.btnLeaveGroup.setText(_translate("ChatWindow", "🚪"))
         self.messageInput.setPlaceholderText(_translate("ChatWindow", "Nhập tin nhắn..."))
         self.btnImage.setText(_translate("ChatWindow", "🖼️"))
         self.btnFile.setText(_translate("ChatWindow", "📁"))
         self.btnVoice.setText(_translate("ChatWindow", "🎤"))
-        self.btnCall.setText(_translate("ChatWindow", "📞"))
-        self.btnVideo.setText(_translate("ChatWindow", "🎥"))
-
-
-if __name__ == "__main__":
-    import sys
-    app = QtWidgets.QApplication(sys.argv)
-    ChatWindow = QtWidgets.QMainWindow()
-    ui = Ui_ChatWindow()
-    ui.setupUi(ChatWindow)
-    ChatWindow.show()
-    sys.exit(app.exec_())
