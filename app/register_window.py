@@ -2,10 +2,11 @@
 # -*- coding: utf-8 -*-
 from PyQt5 import QtWidgets
 from ui.ui_register import Ui_SignUpWindow
-from backend import ChatClient
+from backend.chatclient import ChatClient
 from PyQt5.QtWidgets import QFileDialog, QMessageBox
 from PyQt5.QtGui import QPixmap, QPainter, QBitmap
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore imcport Qt
+from PyQt5.QtCore import QTimer
 import os
 
 class RegisterWindow(QtWidgets.QMainWindow, Ui_SignUpWindow):
@@ -103,10 +104,10 @@ class RegisterWindow(QtWidgets.QMainWindow, Ui_SignUpWindow):
         """Nhận phản hồi từ server."""
         if "REGISTER_OK" in message:
             QMessageBox.information(self, "Thành công", "Đăng ký thành công!")
-            try:
-                self.open_login()
-            except Exception:
-                pass
+
+            # Delay 100ms trước khi mở login, tránh crash do QMessageBox đang active
+            QTimer.singleShot(100, self.open_login)
+
         elif "REGISTER_FAIL" in message:
             QMessageBox.warning(self, "Lỗi", "Tên người dùng đã tồn tại!")
 

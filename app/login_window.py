@@ -3,7 +3,6 @@ from http import client
 from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtWidgets import QMessageBox
 
-from app import chat_window
 from app.chat_window import ChatWindow
 from backend.chatclient import ChatClient
 
