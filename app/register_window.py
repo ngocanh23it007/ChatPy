@@ -1,11 +1,10 @@
 # app/register_window.py
 # -*- coding: utf-8 -*-
-from PyQt5 import QtWidgets
+from PyQt5 import QtWidgets, Qt
 from ui.ui_register import Ui_SignUpWindow
 from backend.chatclient import ChatClient
 from PyQt5.QtWidgets import QFileDialog, QMessageBox
 from PyQt5.QtGui import QPixmap, QPainter, QBitmap
-from PyQt5.QtCore imcport Qt
 from PyQt5.QtCore import QTimer
 import os
 
