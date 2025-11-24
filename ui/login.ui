@@ -31,18 +31,18 @@ border-bottom-left-radius: 10px;</string>
       <layout class="QVBoxLayout" name="verticalLayout_2">
        <item>
         <widget class="QLabel" name="logoLabel">
-         <property name="font">
-          <font>
-           <pointsize>22</pointsize>
-           <bold>true</bold>
-          </font>
-         </property>
-         <property name="text">
-          <string>ChatPy</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
+            <property name="minimumSize">
+                <size>
+                    <width>300</width>
+                    <height>300</height>
+                </size>
+            </property>
+            <property name="pixmap">
+                <pixmap></pixmap>
+            </property>
+            <property name="scaledContents">
+                <bool>true</bool>
+            </property>
         </widget>
        </item>
        <item>

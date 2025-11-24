@@ -1,12 +1,12 @@
 # ChatServer.py
+# GUI chuyển từ Tkinter sang PyQt5 (giữ nguyên logic server)
 import socket
 import threading
 import pymysql
 import os
 import base64
-import tkinter as tk
-from tkinter.scrolledtext import ScrolledText
-
+import sys
+from PyQt5 import QtWidgets, QtCore
 
 HOST = "0.0.0.0"
 PORT = 2025
@@ -34,8 +34,12 @@ db = pymysql.connect(
 def get_cursor():
     return db.cursor()
 
+# We'll use a MainWindow instance for GUI operations
+main_window = None  # will be set after GUI is created
+
 # ------------------- GỬI DANH SÁCH USER ONLINE + TẤT CẢ USER TỪ DB -------------------
 def send_user_list():
+    # Build set of online usernames
     with clients_lock:
         online_users = {info['username'] for info in clients.values()}
 
@@ -47,6 +51,7 @@ def send_user_list():
         all_users = [(r['username'], r.get('avatar') or 'avatars/default.jpg') for r in rows]
     except Exception as e:
         print("[DB ERROR] Không thể lấy danh sách user:", e)
+        gui_log(f"[DB ERROR] Không thể lấy danh sách user: {e}")
         return
 
     # Gửi ALL_USERS tới tất cả client
@@ -58,11 +63,14 @@ def send_user_list():
             except:
                 pass
 
-    # Cập nhật GUI server
-    user_listbox.delete(0, tk.END)
+    # Cập nhật GUI server - emit list of display strings
+    display_list = []
     for username, avatar in all_users:
         status = "🟢" if username in online_users else "⚪"  # 🟢 online, ⚪ offline
-        user_listbox.insert(tk.END, f"{status} {username}")
+        display_list.append(f"{status} {username}")
+
+    if main_window:
+        main_window.users_signal.emit(display_list)
 
 # ------------------- REGISTER -------------------
 def handle_register(parts, conn):
@@ -125,9 +133,7 @@ def handle_login(parts, conn):
         conn.sendall(f"USER_LIST|{'|'.join(users)}\n".encode("utf-8"))
 
         # --- gửi USER_LIST cho tất cả client khác (cập nhật UI) ---
-        # sau khi thêm vào clients
         with clients_lock:
-            # gửi USER_LIST cho tất cả client, bao gồm cả client mới
             users = [f"{info['username']}:{info['avatar']}" for info in clients.values()]
             for c in clients.keys():
                 try:
@@ -198,10 +204,8 @@ def handle_private(parts, conn):
             gui_log(f"[PRIVATE SEND ERROR] {e}")
 
     # Lưu DB
-    # --- Lưu tin nhắn vào database (giữ nguyên bảng cũ) ---
     try:
         cur = get_cursor()
-        # Gộp người nhận và nội dung vào 1 chuỗi
         content = f"[PRIVATE to {target}] {text}"
         cur.execute("""
             INSERT INTO messages (sender, msg_type, content)
@@ -267,7 +271,6 @@ def handle_image(parts, conn):
             except Exception as e:
                 print("[PRIVATE IMG ERROR]", e)
                 gui_log(f"[PRIVATE IMG ERROR] {e}")
-
 
 def handle_file(parts, conn):
     if len(parts) < 4:
@@ -896,10 +899,11 @@ def handle_client(conn, addr):
 server_socket = None  # biến toàn cục để dừng server
 
 def gui_log(message):
-    log_text.config(state='normal')
-    log_text.insert(tk.END, message + "\n")
-    log_text.see(tk.END)
-    log_text.config(state='disabled')
+    # Emit to GUI via main_window signal if available; otherwise print
+    if main_window:
+        main_window.log_signal.emit(message)
+    else:
+        print(message)
 
 def stop_server():
     global server_socket
@@ -933,30 +937,78 @@ def start_server_thread():
     threading.Thread(target=start_server, daemon=True).start()
 
 
-# --- KHỞI TẠO GUI ---
-root = tk.Tk()
-root.title("Chat Server GUI")
-root.geometry("600x400")
+# --- KHỞI TẠO GUI BẰNG PYQT5 ---
+class MainWindow(QtWidgets.QMainWindow):
+    log_signal = QtCore.pyqtSignal(str)
+    users_signal = QtCore.pyqtSignal(list)  # list of strings to display in user list
 
-# ------------------- GUI BUTTONS (đặt lên đầu) -------------------
-button_frame = tk.Frame(root)
-button_frame.pack(fill="x", pady=5)
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Chat Server GUI")
+        self.resize(600, 400)
 
-start_btn = tk.Button(button_frame, text="Start Server", command=start_server_thread, bg="#4CAF50", fg="white")
-start_btn.pack(side="left", expand=True, fill="x", padx=5)
+        # central widget & layout
+        central = QtWidgets.QWidget()
+        self.setCentralWidget(central)
+        vbox = QtWidgets.QVBoxLayout()
+        central.setLayout(vbox)
 
-stop_btn = tk.Button(button_frame, text="Stop Server", command=stop_server, bg="#F44336", fg="white")
-stop_btn.pack(side="left", expand=True, fill="x", padx=5)
+        # button frame (horizontal)
+        button_frame = QtWidgets.QWidget()
+        button_layout = QtWidgets.QHBoxLayout()
+        button_frame.setLayout(button_layout)
+        vbox.addWidget(button_frame)
 
-# Text widget hiển thị log
-log_text = ScrolledText(root, state='disabled', height=15)
-log_text.pack(fill='both', expand=True, pady=5)
+        # Start / Stop buttons
+        self.start_btn = QtWidgets.QPushButton("Start Server")
+        self.start_btn.clicked.connect(start_server_thread)
+        # keep color styling similar (not necessary but okay)
+        self.start_btn.setStyleSheet("background-color: #4CAF50; color: white; padding:6px;")
+        button_layout.addWidget(self.start_btn)
 
-# Listbox hiển thị user online
-user_listbox = tk.Listbox(root)
-user_listbox.pack(fill='x', pady=5)
+        self.stop_btn = QtWidgets.QPushButton("Stop Server")
+        self.stop_btn.clicked.connect(stop_server)
+        self.stop_btn.setStyleSheet("background-color: #F44336; color: white; padding:6px;")
+        button_layout.addWidget(self.stop_btn)
 
-load_groups_from_db()
+        # Log text (QTextEdit, read-only)
+        self.log_text = QtWidgets.QTextEdit()
+        self.log_text.setReadOnly(True)
+        self.log_text.setMinimumHeight(200)
+        vbox.addWidget(self.log_text)
 
-# ------------------- MAIN LOOP -------------------
-root.mainloop()
+        # User list
+        self.user_listwidget = QtWidgets.QListWidget()
+        self.user_listwidget.setMaximumHeight(150)
+        vbox.addWidget(self.user_listwidget)
+
+        # connect signals
+        self.log_signal.connect(self.append_log_slot)
+        self.users_signal.connect(self.update_user_list_slot)
+
+    @QtCore.pyqtSlot(str)
+    def append_log_slot(self, message):
+        # Append text and auto-scroll
+        self.log_text.append(message)
+
+    @QtCore.pyqtSlot(list)
+    def update_user_list_slot(self, items):
+        self.user_listwidget.clear()
+        for it in items:
+            self.user_listwidget.addItem(it)
+
+# Create QApplication and main window, set global reference
+def main():
+    global main_window
+    app = QtWidgets.QApplication(sys.argv)
+    main_window = MainWindow()
+
+    # Ensure load groups runs after main_window is set, so gui_log works
+    load_groups_from_db()
+
+    main_window.show()
+    # Start Qt event loop
+    sys.exit(app.exec_())
+
+if __name__ == "__main__":
+    main()

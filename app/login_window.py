@@ -1,10 +1,13 @@
+import os
 from http import client
 
-from PyQt5 import QtWidgets, QtCore
+from PyQt5 import QtWidgets, QtCore, Qt
+from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import QMessageBox
 
 from app.chat_window import ChatWindow
 from backend.chatclient import ChatClient
+from PyQt5.QtCore import Qt
 
 class LoginWindow(QtWidgets.QMainWindow):
     server_message_signal = QtCore.pyqtSignal(str)
@@ -14,6 +17,23 @@ class LoginWindow(QtWidgets.QMainWindow):
         from ui.ui_login import Ui_LoginWindow
         self.ui = Ui_LoginWindow()
         self.ui.setupUi(self)
+
+        # ====== LOAD LOGO ======
+        base_path = os.path.dirname(os.path.abspath(__file__))
+        logo_path = os.path.join(base_path, "..", "logo.png")  # lên 1 thư mục
+        if os.path.exists(logo_path):
+            pix = QPixmap(logo_path)
+
+            # Scale logo vừa với label, giữ tỉ lệ
+            label_width = self.ui.logoLabel.width()
+            label_height = self.ui.logoLabel.height()
+            pix = pix.scaled(label_width, label_height, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+
+            self.ui.logoLabel.setPixmap(pix)
+            self.ui.logoLabel.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)  # Căn giữa ngang + dọc
+            self.ui.logoLabel.setMinimumSize(label_width, label_height)        # Giữ kích thước label
+        else:
+            print("⚠️ Không tìm thấy logo.png tại:", logo_path)
 
         self.client = ChatClient()
         self.server_message_signal.connect(self.handle_server_message)

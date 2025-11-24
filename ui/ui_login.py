@@ -28,11 +28,8 @@ class Ui_LoginWindow(object):
         self.verticalLayout_2 = QtWidgets.QVBoxLayout(self.leftFrame)
         self.verticalLayout_2.setObjectName("verticalLayout_2")
         self.logoLabel = QtWidgets.QLabel(self.leftFrame)
-        font = QtGui.QFont()
-        font.setPointSize(22)
-        font.setBold(True)
-        self.logoLabel.setFont(font)
-        self.logoLabel.setAlignment(QtCore.Qt.AlignCenter)
+        self.logoLabel.setMinimumSize(QtCore.QSize(300, 300))
+        self.logoLabel.setScaledContents(True)
         self.logoLabel.setObjectName("logoLabel")
         self.verticalLayout_2.addWidget(self.logoLabel)
         spacerItem = QtWidgets.QSpacerItem(20, 300, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
@@ -103,19 +100,8 @@ class Ui_LoginWindow(object):
     def retranslateUi(self, LoginWindow):
         _translate = QtCore.QCoreApplication.translate
         LoginWindow.setWindowTitle(_translate("LoginWindow", "Sign In"))
-        self.logoLabel.setText(_translate("LoginWindow", "ChatPy"))
         self.titleLabel.setText(_translate("LoginWindow", "Welcome Back!"))
         self.nameInput.setPlaceholderText(_translate("LoginWindow", "Username"))
         self.passwordInput.setPlaceholderText(_translate("LoginWindow", "Password"))
         self.signInButton.setText(_translate("LoginWindow", "Sign In"))
         self.signUpButton.setText(_translate("LoginWindow", "Don\'t have an account? Sign Up"))
-
-
-if __name__ == "__main__":
-    import sys
-    app = QtWidgets.QApplication(sys.argv)
-    LoginWindow = QtWidgets.QMainWindow()
-    ui = Ui_LoginWindow()
-    ui.setupUi(LoginWindow)
-    LoginWindow.show()
-    sys.exit(app.exec_())

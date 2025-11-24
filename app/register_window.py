@@ -5,14 +5,38 @@ from ui.ui_register import Ui_SignUpWindow
 from backend.chatclient import ChatClient
 from PyQt5.QtWidgets import QFileDialog, QMessageBox
 from PyQt5.QtGui import QPixmap, QPainter, QBitmap
-from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import QTimer, pyqtSignal
+from PyQt5.QtCore import Qt
 import os
 
 class RegisterWindow(QtWidgets.QMainWindow, Ui_SignUpWindow):
+    server_message_signal = pyqtSignal(str)
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setupUi(self)  # Load giao diện từ Qt Designer
+        # ====== LOAD LOGO ======
+        base_path = os.path.dirname(os.path.abspath(__file__))
+        logo_path = os.path.join(base_path, "..", "logo.png")         # đi lên 1 thư mục
+
+        if os.path.exists(logo_path):
+            pix = QPixmap(logo_path)
+
+            # Scale logo vừa với label, giữ tỉ lệ
+            label_width = self.logoLabel.width()
+            label_height = self.logoLabel.height()
+            pix = pix.scaled(label_width, label_height, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+
+            self.logoLabel.setPixmap(pix)
+            self.logoLabel.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)  # Căn giữa ngang + dọc
+            self.logoLabel.setMinimumSize(label_width, label_height)        # Giữ kích thước label
+        else:
+            print("⚠️ Không tìm thấy logo.png tại:", logo_path)
+
+        # Kết nối signal tới handler
+        self.server_message_signal.connect(self.handle_server_message)
         self.client = ChatClient()
+        # Thay vì gán trực tiếp handle_server_message
+        self.client.on_message = self.emit_server_message  # gọi từ thread khác
         self.avatar_path = None
         self._avatar_pixmap = None  # Giữ reference để tránh bị GC
 
@@ -21,12 +45,12 @@ class RegisterWindow(QtWidgets.QMainWindow, Ui_SignUpWindow):
         self.signInButton.clicked.connect(self.open_login)
         self.avatarLabel.mousePressEvent = self.choose_avatar  # Click để chọn ảnh
 
-        # Gán avatar mặc định nếu có
-        default_avatar = os.path.join("avatars", "default.jpg")
-        if os.path.exists(default_avatar):
-            self._set_avatar_pixmap(default_avatar)
-        else:
-            self.avatarLabel.setText("Click to select avatar")
+        # # Gán avatar mặc định nếu có
+        # default_avatar = os.path.join("avatars", "default.jpg")
+        # if os.path.exists(default_avatar):
+        #     self._set_avatar_pixmap(default_avatar)
+        # else:
+        #     self.avatarLabel.setText("Click to select avatar")
 
     def _set_avatar_pixmap(self, filepath):
         """Load ảnh, bo tròn và hiển thị trong avatarLabel."""
@@ -37,7 +61,7 @@ class RegisterWindow(QtWidgets.QMainWindow, Ui_SignUpWindow):
                 return
 
             # Scale avatar
-            pix = pix.scaled(120, 120, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+            pix = pix.scaled(120, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
             # Bo tròn bằng mask
             mask = QBitmap(120, 120)
@@ -94,19 +118,20 @@ class RegisterWindow(QtWidgets.QMainWindow, Ui_SignUpWindow):
 
         try:
             self.client.connect()
-            self.client.on_message = self.handle_server_message
+            # self.client.on_message = self.handle_server_message
             self.client.register(user, pw, avatar)
         except Exception as e:
             QMessageBox.critical(self, "Lỗi", f"Không thể kết nối tới server: {e}")
 
+    def emit_server_message(self, message):
+        """Emit message từ thread mạng sang GUI thread"""
+        self.server_message_signal.emit(message)
+
     def handle_server_message(self, message):
-        """Nhận phản hồi từ server."""
+        """Chạy trên GUI thread, an toàn thao tác GUI"""
         if "REGISTER_OK" in message:
             QMessageBox.information(self, "Thành công", "Đăng ký thành công!")
-
-            # Delay 100ms trước khi mở login, tránh crash do QMessageBox đang active
-            QTimer.singleShot(100, self.open_login)
-
+            self.open_login()
         elif "REGISTER_FAIL" in message:
             QMessageBox.warning(self, "Lỗi", "Tên người dùng đã tồn tại!")
 

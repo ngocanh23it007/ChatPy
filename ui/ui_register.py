@@ -28,11 +28,8 @@ class Ui_SignUpWindow(object):
         self.verticalLayout_2 = QtWidgets.QVBoxLayout(self.leftFrame)
         self.verticalLayout_2.setObjectName("verticalLayout_2")
         self.logoLabel = QtWidgets.QLabel(self.leftFrame)
-        font = QtGui.QFont()
-        font.setPointSize(22)
-        font.setBold(True)
-        self.logoLabel.setFont(font)
-        self.logoLabel.setAlignment(QtCore.Qt.AlignCenter)
+        self.logoLabel.setMinimumSize(QtCore.QSize(300, 300))
+        self.logoLabel.setScaledContents(True)
         self.logoLabel.setObjectName("logoLabel")
         self.verticalLayout_2.addWidget(self.logoLabel)
         spacerItem = QtWidgets.QSpacerItem(20, 300, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
@@ -129,7 +126,6 @@ class Ui_SignUpWindow(object):
     def retranslateUi(self, SignUpWindow):
         _translate = QtCore.QCoreApplication.translate
         SignUpWindow.setWindowTitle(_translate("SignUpWindow", "Sign Up"))
-        self.logoLabel.setText(_translate("SignUpWindow", "ChatPy"))
         self.titleLabel.setText(_translate("SignUpWindow", "Create Your Account"))
         self.avatarLabel.setText(_translate("SignUpWindow", "Click to select avatar"))
         self.nameInput.setPlaceholderText(_translate("SignUpWindow", "Full Name"))
