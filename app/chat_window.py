@@ -376,25 +376,27 @@ class ChatWindow(QtWidgets.QMainWindow):
 
         elif msg.startswith("VIDEO_ACCEPT|"):
             _, acceptor = msg.split("|", 1)
-            if self.current_video_call and not self.current_video_call.incoming:
-                print("🎥 Opponent accepted video call → Start camera")
-                self.current_video_call.start()
+            if hasattr(self, "current_video_call") and self.current_video_call and not self.current_video_call.incoming:
+                self.current_video_call.accept_and_start()
                 self.current_video_call.show()
 
         elif msg.startswith("VIDEO_STREAM|"):
             try:
                 _, sender, b64_video, b64_audio = msg.split("|", 3)
             except ValueError:
-                # maybe audio empty or missing - try split 2 parts
                 try:
                     _, sender, b64_video = msg.split("|", 2)
                     b64_audio = ""
                 except Exception:
                     return
-            # deliver to current_video_call if matches sender
-            if hasattr(self, "current_video_call") and self.current_video_call and self.current_video_call.target_user.strip() == sender.strip():
-                # push to videocall for display
-                QtCore.QTimer.singleShot(0, lambda b=b64_video: self.current_video_call.receive_remote_frame(b))
+
+            if hasattr(self, "current_video_call") and self.current_video_call and \
+                    self.current_video_call.target_user.strip() == sender.strip():
+                QtCore.QTimer.singleShot(
+                    0,
+                    lambda v=b64_video, a=b64_audio:
+                    self.current_video_call.receive_remote_frame(v, a)
+                )
 
         elif msg.startswith("VIDEO_END|"):
             try:
@@ -404,13 +406,10 @@ class ChatWindow(QtWidgets.QMainWindow):
             if hasattr(self, "current_video_call") and self.current_video_call:
                 self.current_video_call.end()
 
-
-
         else:
             # Nếu không biết lệnh, in ra debug
             print("[UNKNOWN CMD]", msg)
 # ------------------- Lưu tin nhắn -------------------
-
     def set_user_avatar(self):
         """
         Hiển thị avatar của user đăng nhập hiện tại ở chỗ 'Xin chào, username'.
@@ -1177,19 +1176,18 @@ class ChatWindow(QtWidgets.QMainWindow):
             return
 
         target = self.current_chat_user
-        # tạo VideoCall instance (nhưng chưa start)
+
         self.current_video_call = VideoCall(self.client, target, parent=self)
+        self.client.video_call = self.current_video_call   # ⭐ rất quan trọng
         self.current_video_call.show()
 
         try:
-            # gửi yêu cầu
             self.client.send_video_request(target)
             print(f"📹 Gửi VIDEO_REQUEST tới {target}")
         except Exception as e:
             print("Không gửi được VIDEO_REQUEST:", e)
 
     def show_incoming_video_popup(self, caller):
-        # nếu có cuộc gọi video đang tồn tại, ignore
         if hasattr(self, "current_video_call") and getattr(self, "current_video_call", None):
             if getattr(self.current_video_call, "is_running", False):
                 return
@@ -1200,8 +1198,8 @@ class ChatWindow(QtWidgets.QMainWindow):
             f"{caller} muốn gọi video. Chấp nhận?",
             QMessageBox.Yes | QMessageBox.No
         )
+
         if reply == QMessageBox.Yes:
-            # send accept
             try:
                 self.client.send_video_accept(caller)
             except Exception:
@@ -1209,8 +1207,9 @@ class ChatWindow(QtWidgets.QMainWindow):
                     self.client.send(f"VIDEO_ACCEPT|{caller}\n")
                 except:
                     pass
-            # create VideoCall incoming and start
+
             self.current_video_call = VideoCall(self.client, caller, incoming=True, parent=self)
+            self.client.video_call = self.current_video_call
             self.current_video_call.accept_and_start()
         else:
             try:

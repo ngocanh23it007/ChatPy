@@ -8,7 +8,7 @@ from pygame import time
 
 
 class ChatClient:
-    def __init__(self, host="127.0.0.1", port=2025, gui_parent=None):
+    def __init__(self, host="192.168.56.101", port=2025, gui_parent=None):
         self.host = host
         self.port = port
         self.sock = None
