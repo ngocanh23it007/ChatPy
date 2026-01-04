@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1000</width>
-    <height>600</height>
+    <width>1300</width>
+    <height>800</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -16,110 +16,142 @@
   <widget class="QWidget" name="centralwidget">
    <layout class="QHBoxLayout" name="mainLayout">
 
-    <!-- ===== Left Panel (Danh sách bạn bè / nhóm) ===== -->
+    <!-- ========== LEFT PANEL (3 KHUNG) ========== -->
     <item>
      <widget class="QFrame" name="leftPanel">
       <property name="minimumSize">
         <size>
-         <width>220</width>
-         <height>20</height>
+         <width>280</width>
+         <height>40</height>
         </size>
        </property>
-       <property name="maximumSize">
+      <property name="maximumSize">
         <size>
-         <width>220</width>
+         <width>260</width>
          <height>16777215</height>
         </size>
-       </property>
+      </property>
       <property name="styleSheet">
        <string notr="true">
         background-color: #F4F6FA;
         border-right: 1px solid #CCCCCC;
        </string>
       </property>
+
       <layout class="QVBoxLayout" name="leftLayout">
+
+       <!-- ===== FRAME 1: USER INFO ===== -->
        <item>
-        <widget class="QLabel" name="userLabel">
-         <property name="text">
-          <string>Xin chào, username</string>
+        <widget class="QFrame" name="userInfoFrame">
+         <property name="minimumSize">
+          <size><width>0</width><height>120</height></size>
          </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-         <property name="styleSheet">
-          <string notr="true">font-weight: bold; font-size: 14px;</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QListWidget" name="userList">
          <property name="styleSheet">
           <string notr="true">
-           QListWidget {
-            background: white;
-            border: none;
-           }
-           QListWidget::item:selected {
-            background-color: #4A90E2;
-            color: white;
-           }
+           background-color: #FFFFFF;
+           border-bottom: 1px solid #CCCCCC;
           </string>
          </property>
+
+         <layout class="QVBoxLayout" name="userLayout">
+          <property name="alignment">
+           <set>Qt::AlignHCenter</set>
+          </property>
+
+          <item alignment="Qt::AlignHCenter">
+           <widget class="QLabel" name="userAvatar">
+            <property name="minimumSize"><size><width>70</width><height>70</height></size></property>
+            <property name="maximumSize"><size><width>70</width><height>70</height></size></property>
+            <property name="scaledContents"><bool>true</bool></property>
+            <property name="styleSheet"><string notr="true">border-radius: 35px; background-color: #DDD;</string></property>
+           </widget>
+          </item>
+
+          <item alignment="Qt::AlignHCenter">
+           <widget class="QLabel" name="userLabel">
+            <property name="text">
+             <string>Xin chào, username</string>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">font-weight: bold; font-size: 15px;</string>
+            </property>
+           </widget>
+          </item>
+
+         </layout>
         </widget>
        </item>
+
+       <!-- ===== FRAME 2: FRIEND LIST + GROUP LIST ===== -->
        <item>
+        <widget class="QFrame" name="friendFrame">
+         <property name="styleSheet">
+          <string notr="true">
+           background-color: transparent;
+          </string>
+         </property>
+
+         <layout class="QVBoxLayout" name="friendLayout">
+
+          <item>
+           <widget class="QLabel" name="friendLabel">
+            <property name="text"><string>Danh sách bạn bè</string></property>
+            <property name="alignment"><set>Qt::AlignCenter</set></property>
+            <property name="styleSheet"><string notr="true">font-size: 14px; font-weight: bold;</string></property>
+           </widget>
+          </item>
+
+          <item>
+           <widget class="QListWidget" name="userList">
+            <property name="styleSheet">
+             <string notr="true">
+              QListWidget { background: white; border: none; }
+              QListWidget::item:selected { background-color: #4A90E2; color: white; }
+             </string>
+            </property>
+           </widget>
+          </item>
+
+          <item>
            <widget class="QLabel" name="groupLabel">
-               <property name="text"><string>Nhóm</string></property>
-               <property name="alignment">
-                   <set>Qt::AlignCenter</set>
-               </property>
-               <property name="styleSheet">
-                   <string notr="true">font-weight: bold; font-size: 14px;</string>
-               </property>
+            <property name="text"><string>Nhóm</string></property>
+            <property name="alignment"><set>Qt::AlignCenter</set></property>
+            <property name="styleSheet"><string notr="true">font-size: 14px; font-weight: bold;</string></property>
            </widget>
-       </item>
-       <item>
+          </item>
+
+          <item>
            <widget class="QListWidget" name="groupList">
-               <property name="styleSheet">
-                   <string notr="true">
-                       QListWidget {
-                           background: white;
-                           border: none;
-                       }
-                       QListWidget::item:selected {
-                           background-color: #4A90E2;
-                           color: white;
-                       }
-                   </string>
-               </property>
+            <property name="styleSheet">
+             <string notr="true">
+              QListWidget { background: white; border: none; }
+              QListWidget::item:selected { background-color: #4A90E2; color: white; }
+             </string>
+            </property>
            </widget>
-       </item>
-       <item alignment="Qt::AlignHCenter">
-        <widget class="QPushButton" name="btnCreateGroup">
-         <property name="text">
-          <string>+ Tạo nhóm</string>
-         </property>
-         <property name="styleSheet">
-          <string notr="true">
-           QPushButton {
-            background-color: #4CAF50;
-            color: white;
-            border-radius: 8px;
-            padding: 6px 12px;
-            font-weight: bold;
-           }
-           QPushButton:hover {
-            background-color: #45A049;
-           }
-          </string>
-         </property>
+          </item>
+
+          <item alignment="Qt::AlignHCenter">
+           <widget class="QPushButton" name="btnCreateGroup">
+            <property name="text"><string>+ Tạo nhóm</string></property>
+            <property name="styleSheet">
+             <string notr="true">
+              QPushButton { background-color: #4CAF50; color: white; border-radius: 8px; padding: 6px 12px; font-weight: bold; }
+              QPushButton:hover { background-color: #45A049; }
+             </string>
+            </property>
+           </widget>
+          </item>
+
+         </layout>
         </widget>
        </item>
+
       </layout>
      </widget>
     </item>
 
-    <!-- ===== Right Panel (Khu chat) ===== -->
+    <!-- ===== FRAME 3: CHAT PANEL (KHÔNG ĐỔI) ===== -->
     <item>
      <widget class="QFrame" name="chatPanel">
       <property name="styleSheet">

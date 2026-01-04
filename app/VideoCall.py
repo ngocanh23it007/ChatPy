@@ -7,11 +7,14 @@ import cv2
 import numpy as np
 import sounddevice as sd
 from scipy.io.wavfile import write, read
-from PyQt5.QtWidgets import QDialog, QLabel, QPushButton, QVBoxLayout, QHBoxLayout
+from PyQt5.QtWidgets import QDialog, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QApplication
 from PyQt5.QtGui import QPixmap, QImage
 from PyQt5.QtCore import Qt
+from PyQt5.QtCore import pyqtSignal
 
 class VideoCall(QDialog):
+    signal_local = pyqtSignal(QPixmap)
+    signal_remote = pyqtSignal(QPixmap)
     """
     VideoCall: dialog hiển thị remote (lớn) và local (nhỏ góc phải).
     Gửi frame JPEG base64 + audio Base64 qua client.send_video_stream(target, b64_video, b64_audio)
@@ -26,6 +29,7 @@ class VideoCall(QDialog):
         self.width = width
         self.height = height
         self.is_running = False
+        self.call_established = False
 
         # queues
         self._send_queue = queue.Queue(maxsize=100)
@@ -61,6 +65,10 @@ class VideoCall(QDialog):
         self.local_label.setAttribute(Qt.WA_TranslucentBackground, True)
         self.local_label.raise_()
 
+        self.signal_local.connect(self.local_label.setPixmap)
+        self.signal_remote.connect(self.remote_label.setPixmap)
+
+
         # capture
         self._cap = None
         self._t_capture = None
@@ -75,39 +83,48 @@ class VideoCall(QDialog):
         self.audio_fs = 16000
         self.audio_chunk = 1024
 
+        # audio playback (NHẬN)
+        self._audio_play_queue = queue.Queue(maxsize=100)
+        self._t_audio_play = None
+
+
     # ---------- lifecycle ----------
     def start(self):
         if self.is_running:
             return
+
         self.is_running = True
 
-        # open camera
         try:
             self._cap = cv2.VideoCapture(0)
-            self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
-            self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
-        except Exception as e:
-            print("[VideoCall] cannot open camera:", e)
+        except:
             self.is_running = False
             return
 
-        # threads
-        self._t_capture = threading.Thread(target=self._capture_loop, daemon=True)
-        self._t_capture.start()
-
-        self._t_send = threading.Thread(target=self._send_loop, daemon=True)
-        self._t_send.start()
-
-        self._t_audio = threading.Thread(target=self._audio_capture_loop, daemon=True)
-        self._t_audio.start()
-
-        self._t_ui = threading.Thread(target=self._ui_update_loop, daemon=True)
-        self._t_ui.start()
-
         self.show()
+        QApplication.processEvents()
+
+        self._t_capture = threading.Thread(target=self._capture_loop, daemon=True)
+        self._t_send = threading.Thread(target=self._send_loop, daemon=True)
+        self._t_audio = threading.Thread(target=self._audio_capture_loop, daemon=True)
+        self._t_ui = threading.Thread(target=self._ui_update_loop, daemon=True)
+
+        self._t_capture.start()
+        self._t_send.start()
+        self._t_audio.start()
+        self._t_ui.start()
+        self._t_audio_play = threading.Thread(
+            target=self._audio_play_loop,
+            daemon=True
+        )
+        self._t_audio_play.start()
+
+        self.resizeEvent(None)
 
     def accept_and_start(self):
+        self.call_established = True   # ⭐ RẤT QUAN TRỌNG
         self.start()
+
 
     def end(self):
         if not self.is_running:
@@ -140,6 +157,7 @@ class VideoCall(QDialog):
     # ---------- video capture + send ----------
     def _capture_loop(self):
         interval = 1.0 / max(1, self.fps)
+
         while self.is_running:
             ret, frame = self._cap.read()
             if not ret:
@@ -147,9 +165,27 @@ class VideoCall(QDialog):
                 continue
 
             frame_small = cv2.resize(frame, (480, 360))
-            ok, jpeg = cv2.imencode('.jpg', frame_small, [int(cv2.IMWRITE_JPEG_QUALITY), 60])
+
+            # ===== local preview luôn hiển thị =====
+            qt_pix = self._cv2_to_qpixmap(frame_small, small=True)
+            try:
+                self.signal_local.emit(qt_pix)
+            except:
+                pass
+
+            # ⛔ CHƯA ACCEPT → KHÔNG GỬI FRAME
+            if not self.call_established:
+                time.sleep(interval)
+                continue
+
+            ok, jpeg = cv2.imencode(
+                '.jpg',
+                frame_small,
+                [int(cv2.IMWRITE_JPEG_QUALITY), 60]
+            )
             if not ok:
                 continue
+
             b64_video = base64.b64encode(jpeg.tobytes()).decode('ascii')
 
             try:
@@ -157,11 +193,6 @@ class VideoCall(QDialog):
             except queue.Full:
                 pass
 
-            qt_pix = self._cv2_to_qpixmap(frame_small, small=True)
-            try:
-                self.local_label.setPixmap(qt_pix)
-            except:
-                pass
             time.sleep(interval)
 
     def _send_loop(self):
@@ -171,29 +202,33 @@ class VideoCall(QDialog):
             except queue.Empty:
                 continue
 
+            audio_bytes = b""
+            # lấy nhiều audio chunk mỗi lần
+            while not self._audio_queue.empty():
+                try:
+                    audio_bytes += self._audio_queue.get_nowait()
+                except queue.Empty:
+                    break
+
             b64_audio = ""
-            try:
-                audio_data = self._audio_queue.get_nowait()
-                b64_audio = base64.b64encode(audio_data).decode('ascii')
-            except queue.Empty:
-                pass
+            if audio_bytes:
+                b64_audio = base64.b64encode(audio_bytes).decode("ascii")
 
             try:
-                try:
-                    self.client.send_video_stream(self.target_user, b64_video, b64_audio)
-                except Exception:
-                    self.client.send(f"VIDEO_STREAM|{self.target_user}|{b64_video}|{b64_audio}\n")
+                self.client.send_video_stream(
+                    self.target_user, b64_video, b64_audio
+                )
             except Exception as e:
                 print("[VideoCall] send error:", e)
                 self.is_running = False
                 break
-            time.sleep(0.01)
+                time.sleep(0.01)
 
     # ---------- audio capture ----------
     def _audio_capture_loop(self):
         def callback(indata, frames, time_info, status):
-            if not self.is_running:
-                raise sd.CallbackStop()
+            if not self.is_running or not self.call_established:
+                return
             try:
                 self._audio_queue.put_nowait(indata.copy().tobytes())
             except queue.Full:
@@ -222,12 +257,46 @@ class VideoCall(QDialog):
             if b64_audio:
                 audio_bytes = base64.b64decode(b64_audio)
                 audio_np = np.frombuffer(audio_bytes, dtype=np.int16)
+
                 try:
-                    sd.play(audio_np, self.audio_fs, blocking=False)
-                except Exception as e:
-                    print("[VideoCall] audio playback error:", e)
+                    self._audio_play_queue.put_nowait(audio_np)
+                except queue.Full:
+                    pass
         except Exception as e:
             print("[VideoCall] receive_remote_frame error:", e)
+
+    def _audio_play_loop(self):
+        def callback(outdata, frames, time_info, status):
+            if not self.is_running:
+                outdata.fill(0)
+                return
+
+            try:
+                data = self._audio_play_queue.get_nowait()
+                data = data.reshape(-1, 1)
+
+                # nếu data ngắn hơn buffer
+                if len(data) < len(outdata):
+                    outdata[:len(data)] = data
+                    outdata[len(data):].fill(0)
+                else:
+                    outdata[:] = data[:len(outdata)]
+
+            except queue.Empty:
+                outdata.fill(0)
+
+        try:
+            with sd.OutputStream(
+                    samplerate=self.audio_fs,
+                    channels=1,
+                    dtype='int16',
+                    callback=callback,
+                    blocksize=self.audio_chunk
+            ):
+                while self.is_running:
+                    time.sleep(0.05)
+        except Exception as e:
+            print("[VideoCall] audio play error:", e)
 
     # ---------- UI update ----------
     def _ui_update_loop(self):
@@ -238,11 +307,13 @@ class VideoCall(QDialog):
                 if self._last_remote_frame is not None:
                     frame = self._last_remote_frame.copy()
                     self._last_remote_frame = None
+
             if frame is not None:
                 pix = self._cv2_to_qpixmap(frame, small=False)
-                from PyQt5 import QtCore
-                QtCore.QTimer.singleShot(0, lambda p=pix: self.remote_label.setPixmap(p))
+                self.signal_remote.emit(pix)
+
             time.sleep(interval)
+
 
     def _cv2_to_qpixmap(self, frame, small=False):
         try:

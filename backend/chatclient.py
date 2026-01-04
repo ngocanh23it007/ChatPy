@@ -19,7 +19,7 @@ class ChatClient:
         self.all_users = {}       # username -> avatar_path
         self.online_users = set() # username đang online
 
-# -------------------------------
+        # -------------------------------
         self.group_unread_count = {}  # {group_name: số tin nhắn chưa đọc}
         self.open_groups = set()      # nhóm đang mở
         self.received_msg_ids = set() # tránh tăng count trùng
@@ -329,6 +329,14 @@ class ChatClient:
             # Gọi callback GUI nếu có
             if self.on_message:
                 self.on_message(msg)
+
+        elif cmd == "VIDEO_STREAM":
+            sender = parts[1]
+            b64_video = parts[2] if len(parts) > 2 else ""
+            b64_audio = parts[3] if len(parts) > 3 else ""
+
+            if self.video_call:
+                self.video_call.receive_remote_frame(b64_video, b64_audio)
 
     def close(self):
         self.running = False

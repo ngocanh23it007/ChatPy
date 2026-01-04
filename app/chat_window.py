@@ -5,13 +5,13 @@ from ui.chat_window import Ui_ChatWindow
 from PyQt5.QtGui import QIcon, QPixmap, QPainter, QBrush, QPen
 from PyQt5.QtWidgets import QInputDialog, QListWidget, QPushButton, QVBoxLayout, QDialog, QLabel, QHBoxLayout, QWidget
 from PyQt5.QtWidgets import QFileDialog, QMessageBox
+from PyQt5.QtWidgets import QMenu, QAction
 import shutil
 import sounddevice as sd
 from scipy.io.wavfile import write
 import tempfile
 import threading
 import numpy as np
-from PyQt5.QtWidgets import QMessageBox
 from PyQt5 import QtCore
 from app.VoiceCall import VoiceCall
 from app.VideoCall import VideoCall
@@ -137,8 +137,19 @@ class ChatWindow(QtWidgets.QMainWindow):
 
         self.all_users = {}  # username -> avatar
         self.online_users = set()  # danh sách username online
+        self.set_user_avatar()
 
         self.incoming_video_signal.connect(self.show_incoming_video_popup)
+        self.setup_avatar_menu()
+
+        # Tăng kích thước các nút
+        for btn in [self.ui.btnCall, self.ui.btnVideo, self.ui.btnLeaveGroup]:
+            btn.setStyleSheet("""
+                font-size:25px;        /* tăng font chữ */
+                padding:8px 14px;      /* tăng padding */
+                border-radius:8px;     /* bo góc */
+            """)
+            btn.setMinimumHeight(40)   # tăng chiều cao tối thiểu
 
     # ------------------- Signal và sự kiện nút -------------------
     def setup_signals(self):
@@ -178,6 +189,10 @@ class ChatWindow(QtWidgets.QMainWindow):
             # Gọi cập nhật giao diện
             self.update_user_list()
 
+            # --- Cập nhật avatar cho user hiện tại ---
+            if self.username in self.all_users:
+                self.set_user_avatar()
+
         elif msg.startswith("ALL_USERS|"):
             parts = msg[len("ALL_USERS|"):].split("|")
             for p in parts:
@@ -190,6 +205,10 @@ class ChatWindow(QtWidgets.QMainWindow):
                 self.all_users[username] = avatar  # lưu tất cả user
             # sau khi cập nhật all_users, gọi update_user_list
             self.update_user_list()
+
+            # --- Cập nhật avatar cho user hiện tại ---
+            if self.username in self.all_users:
+                self.set_user_avatar()
 
         elif msg.startswith("GROUP_LIST|"):
             parts = msg[len("GROUP_LIST|"):].split("|")
@@ -385,10 +404,137 @@ class ChatWindow(QtWidgets.QMainWindow):
             if hasattr(self, "current_video_call") and self.current_video_call:
                 self.current_video_call.end()
 
+
+
         else:
             # Nếu không biết lệnh, in ra debug
             print("[UNKNOWN CMD]", msg)
 # ------------------- Lưu tin nhắn -------------------
+
+    def set_user_avatar(self):
+        """
+        Hiển thị avatar của user đăng nhập hiện tại ở chỗ 'Xin chào, username'.
+        """
+        # Lấy avatar của user
+        avatar_path = self.all_users.get(self.username, "avatars/default.jpg")
+
+        if not os.path.exists(avatar_path):
+            avatar_path = "avatars/default.jpg"
+
+        # Load QPixmap
+        pixmap = QPixmap(avatar_path)
+        if pixmap.isNull():
+            pixmap = QPixmap("avatars/default.jpg")
+
+        # Resize về 70x70 (theo UI)
+        pixmap = pixmap.scaled(70, 70, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+
+        # Tạo hình tròn
+        rounded = QPixmap(70, 70)
+        rounded.fill(Qt.transparent)
+        painter = QPainter(rounded)
+        painter.setRenderHint(QPainter.Antialiasing)
+        path = QtGui.QPainterPath()
+        path.addEllipse(0, 0, 70, 70)
+        painter.setClipPath(path)
+        painter.drawPixmap(0, 0, pixmap)
+        painter.end()
+
+        # Gán cho QLabel
+        self.ui.userAvatar.setPixmap(rounded)
+        self.ui.userLabel.setText(f"Xin chào, {self.username}")
+
+    # Trong ChatWindow, thêm hàm setup
+    def setup_avatar_menu(self):
+        # Kích hoạt nhận sự kiện chuột cho QLabel
+        self.ui.userAvatar.setCursor(Qt.PointingHandCursor)
+        self.ui.userAvatar.mousePressEvent = self.show_avatar_menu
+
+    def show_avatar_menu(self, event):
+        menu = QMenu(self)
+
+        logout_action = QAction("Đăng xuất", self)
+        menu.addAction(logout_action)
+
+        # Có thể thêm các lựa chọn khác, ví dụ: Thay đổi avatar
+        change_avatar_action = QAction("Thay đổi avatar", self)
+        menu.addAction(change_avatar_action)
+
+        # Xử lý khi click vào "Đăng xuất"
+        logout_action.triggered.connect(self.logout)
+        change_avatar_action.triggered.connect(self.change_avatar)
+
+        # Hiển thị menu tại vị trí chuột
+        menu.exec_(self.ui.userAvatar.mapToGlobal(event.pos()))
+
+    # Hàm logout
+    def logout(self):
+        reply = QMessageBox.question(
+            self,
+            "Đăng xuất",
+            "Bạn có chắc muốn đăng xuất?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        # --- Ngắt kết nối client ---
+        if hasattr(self, 'client') and self.client:
+            try:
+                self.client.disconnect()
+            except Exception as e:
+                print("❌ Lỗi ngắt kết nối client:", e)
+
+        # --- Ẩn ChatWindow hiện tại ---
+        self.hide()
+
+        # --- Tạo LoginWindow và giữ reference ---
+        try:
+            from app.login_window import LoginWindow
+            self.login_window = LoginWindow()
+            self.login_window.show()
+        except Exception as e:
+            print("❌ Lỗi khi tạo LoginWindow:", e)
+            QtWidgets.QMessageBox.critical(self, "Lỗi", f"Không thể mở màn hình đăng nhập: {e}")
+            # Nếu lỗi nghiêm trọng, thoát luôn app
+            QtWidgets.QApplication.quit()
+
+        # --- Nếu ChatWindow là main window, gọi close() sau khi login window show ---
+        # self.close()  # uncomment nếu muốn ChatWindow hoàn toàn bị đóng
+
+    # Hàm thay đổi avatar
+    def change_avatar(self):
+        # Chọn file ảnh
+        file_path, _ = QFileDialog.getOpenFileName(self, "Chọn ảnh mới", "", "Ảnh (*.png *.jpg *.jpeg)")
+        if not file_path:
+            return
+
+        # Copy sang thư mục avatars, đổi tên theo username
+        os.makedirs("avatars", exist_ok=True)
+        ext = os.path.splitext(file_path)[1].lower()
+        new_path = os.path.join("avatars", f"{self.username}{ext}")
+        try:
+            shutil.copyfile(file_path, new_path)
+        except Exception as e:
+            QMessageBox.warning(self, "Lỗi", f"Không thể lưu avatar: {e}")
+            return
+
+        # Cập nhật đường dẫn avatar
+        self.avatars[self.username] = new_path
+        self.all_users[self.username] = new_path
+        self.set_user_avatar()
+        self.update_user_list()
+
+        # Gửi lên server
+        if self.client:
+            try:
+                with open(new_path, "rb") as f:
+                    data = f.read()
+                b64_data = base64.b64encode(data).decode('utf-8')
+                self.client.send(f"UPDATE_AVATAR|{self.username}|{b64_data}\n")
+            except Exception as e:
+                QMessageBox.warning(self, "Lỗi", f"Không thể gửi avatar lên server: {e}")
+
     def store_message_signal(self, target, sender, message):
         if target not in self.conversations:
             self.conversations[target] = []

@@ -14,14 +14,14 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 class Ui_ChatWindow(object):
     def setupUi(self, ChatWindow):
         ChatWindow.setObjectName("ChatWindow")
-        ChatWindow.resize(1000, 600)
+        ChatWindow.resize(1300, 800)
         self.centralwidget = QtWidgets.QWidget(ChatWindow)
         self.centralwidget.setObjectName("centralwidget")
         self.mainLayout = QtWidgets.QHBoxLayout(self.centralwidget)
         self.mainLayout.setObjectName("mainLayout")
         self.leftPanel = QtWidgets.QFrame(self.centralwidget)
-        self.leftPanel.setMinimumSize(QtCore.QSize(220, 20))
-        self.leftPanel.setMaximumSize(QtCore.QSize(220, 16777215))
+        self.leftPanel.setMinimumSize(QtCore.QSize(250, 20))
+        self.leftPanel.setMaximumSize(QtCore.QSize(260, 16777215))
         self.leftPanel.setStyleSheet("\n"
 "        background-color: #F4F6FA;\n"
 "        border-right: 1px solid #CCCCCC;\n"
@@ -29,57 +29,67 @@ class Ui_ChatWindow(object):
         self.leftPanel.setObjectName("leftPanel")
         self.leftLayout = QtWidgets.QVBoxLayout(self.leftPanel)
         self.leftLayout.setObjectName("leftLayout")
-        self.userLabel = QtWidgets.QLabel(self.leftPanel)
-        self.userLabel.setAlignment(QtCore.Qt.AlignCenter)
-        self.userLabel.setStyleSheet("font-weight: bold; font-size: 14px;")
+        self.userInfoFrame = QtWidgets.QFrame(self.leftPanel)
+        self.userInfoFrame.setMinimumSize(QtCore.QSize(0, 120))
+        self.userInfoFrame.setStyleSheet("\n"
+"           background-color: #FFFFFF;\n"
+"           border-bottom: 1px solid #CCCCCC;\n"
+"          ")
+        self.userInfoFrame.setObjectName("userInfoFrame")
+        self.userLayout = QtWidgets.QVBoxLayout(self.userInfoFrame)
+        self.userLayout.setAlignment(QtCore.Qt.AlignHCenter)
+        self.userLayout.setObjectName("userLayout")
+        self.userAvatar = QtWidgets.QLabel(self.userInfoFrame)
+        self.userAvatar.setMinimumSize(QtCore.QSize(70, 70))
+        self.userAvatar.setMaximumSize(QtCore.QSize(70, 70))
+        self.userAvatar.setScaledContents(True)
+        self.userAvatar.setStyleSheet("border-radius: 35px; background-color: #DDD;")
+        self.userAvatar.setObjectName("userAvatar")
+        self.userLayout.addWidget(self.userAvatar, 0, QtCore.Qt.AlignHCenter)
+        self.userLabel = QtWidgets.QLabel(self.userInfoFrame)
+        self.userLabel.setStyleSheet("font-weight: bold; font-size: 15px;")
         self.userLabel.setObjectName("userLabel")
-        self.leftLayout.addWidget(self.userLabel)
-        self.userList = QtWidgets.QListWidget(self.leftPanel)
+        self.userLayout.addWidget(self.userLabel, 0, QtCore.Qt.AlignHCenter)
+        self.leftLayout.addWidget(self.userInfoFrame)
+        self.friendFrame = QtWidgets.QFrame(self.leftPanel)
+        self.friendFrame.setStyleSheet("\n"
+"           background-color: transparent;\n"
+"          ")
+        self.friendFrame.setObjectName("friendFrame")
+        self.friendLayout = QtWidgets.QVBoxLayout(self.friendFrame)
+        self.friendLayout.setObjectName("friendLayout")
+        self.friendLabel = QtWidgets.QLabel(self.friendFrame)
+        self.friendLabel.setAlignment(QtCore.Qt.AlignCenter)
+        self.friendLabel.setStyleSheet("font-size: 14px; font-weight: bold;")
+        self.friendLabel.setObjectName("friendLabel")
+        self.friendLayout.addWidget(self.friendLabel)
+        self.userList = QtWidgets.QListWidget(self.friendFrame)
         self.userList.setStyleSheet("\n"
-"           QListWidget {\n"
-"            background: white;\n"
-"            border: none;\n"
-"           }\n"
-"           QListWidget::item:selected {\n"
-"            background-color: #4A90E2;\n"
-"            color: white;\n"
-"           }\n"
-"          ")
+"              QListWidget { background: white; border: none; }\n"
+"              QListWidget::item:selected { background-color: #4A90E2; color: white; }\n"
+"             ")
         self.userList.setObjectName("userList")
-        self.leftLayout.addWidget(self.userList)
-        self.groupLabel = QtWidgets.QLabel(self.leftPanel)
+        self.friendLayout.addWidget(self.userList)
+        self.groupLabel = QtWidgets.QLabel(self.friendFrame)
         self.groupLabel.setAlignment(QtCore.Qt.AlignCenter)
-        self.groupLabel.setStyleSheet("font-weight: bold; font-size: 14px;")
+        self.groupLabel.setStyleSheet("font-size: 14px; font-weight: bold;")
         self.groupLabel.setObjectName("groupLabel")
-        self.leftLayout.addWidget(self.groupLabel)
-        self.groupList = QtWidgets.QListWidget(self.leftPanel)
+        self.friendLayout.addWidget(self.groupLabel)
+        self.groupList = QtWidgets.QListWidget(self.friendFrame)
         self.groupList.setStyleSheet("\n"
-"                       QListWidget {\n"
-"                           background: white;\n"
-"                           border: none;\n"
-"                       }\n"
-"                       QListWidget::item:selected {\n"
-"                           background-color: #4A90E2;\n"
-"                           color: white;\n"
-"                       }\n"
-"                   ")
+"              QListWidget { background: white; border: none; }\n"
+"              QListWidget::item:selected { background-color: #4A90E2; color: white; }\n"
+"             ")
         self.groupList.setObjectName("groupList")
-        self.leftLayout.addWidget(self.groupList)
-        self.btnCreateGroup = QtWidgets.QPushButton(self.leftPanel)
+        self.friendLayout.addWidget(self.groupList)
+        self.btnCreateGroup = QtWidgets.QPushButton(self.friendFrame)
         self.btnCreateGroup.setStyleSheet("\n"
-"           QPushButton {\n"
-"            background-color: #4CAF50;\n"
-"            color: white;\n"
-"            border-radius: 8px;\n"
-"            padding: 6px 12px;\n"
-"            font-weight: bold;\n"
-"           }\n"
-"           QPushButton:hover {\n"
-"            background-color: #45A049;\n"
-"           }\n"
-"          ")
+"              QPushButton { background-color: #4CAF50; color: white; border-radius: 8px; padding: 6px 12px; font-weight: bold; }\n"
+"              QPushButton:hover { background-color: #45A049; }\n"
+"             ")
         self.btnCreateGroup.setObjectName("btnCreateGroup")
-        self.leftLayout.addWidget(self.btnCreateGroup, 0, QtCore.Qt.AlignHCenter)
+        self.friendLayout.addWidget(self.btnCreateGroup, 0, QtCore.Qt.AlignHCenter)
+        self.leftLayout.addWidget(self.friendFrame)
         self.mainLayout.addWidget(self.leftPanel)
         self.chatPanel = QtWidgets.QFrame(self.centralwidget)
         self.chatPanel.setStyleSheet("\n"
@@ -205,6 +215,7 @@ class Ui_ChatWindow(object):
         _translate = QtCore.QCoreApplication.translate
         ChatWindow.setWindowTitle(_translate("ChatWindow", "Chat Application"))
         self.userLabel.setText(_translate("ChatWindow", "Xin chào, username"))
+        self.friendLabel.setText(_translate("ChatWindow", "Danh sách bạn bè"))
         self.groupLabel.setText(_translate("ChatWindow", "Nhóm"))
         self.btnCreateGroup.setText(_translate("ChatWindow", "+ Tạo nhóm"))
         self.chatTitle.setText(_translate("ChatWindow", "Chat chung"))
@@ -215,3 +226,13 @@ class Ui_ChatWindow(object):
         self.btnImage.setText(_translate("ChatWindow", "🖼️"))
         self.btnFile.setText(_translate("ChatWindow", "📁"))
         self.btnVoice.setText(_translate("ChatWindow", "🎤"))
+
+
+if __name__ == "__main__":
+    import sys
+    app = QtWidgets.QApplication(sys.argv)
+    ChatWindow = QtWidgets.QMainWindow()
+    ui = Ui_ChatWindow()
+    ui.setupUi(ChatWindow)
+    ChatWindow.show()
+    sys.exit(app.exec_())

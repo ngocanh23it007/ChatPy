@@ -39,40 +39,39 @@ main_window = None  # will be set after GUI is created
 
 # ------------------- GỬI DANH SÁCH USER ONLINE + TẤT CẢ USER TỪ DB -------------------
 def send_user_list():
-    # Build set of online usernames
+    # snapshot clients
     with clients_lock:
         online_users = {info['username'] for info in clients.values()}
+        conns = list(clients.keys())
 
-    # Lấy tất cả user từ DB
+    # lấy user DB
     try:
         cur = get_cursor()
         cur.execute("SELECT username, avatar FROM users")
         rows = cur.fetchall()
         all_users = [(r['username'], r.get('avatar') or 'avatars/default.jpg') for r in rows]
     except Exception as e:
-        print("[DB ERROR] Không thể lấy danh sách user:", e)
-        gui_log(f"[DB ERROR] Không thể lấy danh sách user: {e}")
+        gui_log(f"[DB ERROR] {e}")
         return
 
-    # Gửi ALL_USERS tới tất cả client
     msg_all = "ALL_USERS|" + "|".join(f"{u}:{a}" for u, a in all_users) + "\n"
-    with clients_lock:
-        for c in list(clients.keys()):
-            try:
-                c.sendall(msg_all.encode("utf-8"))
-            except:
-                pass
 
-    # Cập nhật GUI server - emit list of display strings
-    display_list = []
-    for username, avatar in all_users:
-        status = "🟢" if username in online_users else "⚪"  # 🟢 online, ⚪ offline
-        display_list.append(f"{status} {username}")
+    # ❌ KHÔNG LOCK KHI SEND
+    for c in conns:
+        try:
+            c.sendall(msg_all.encode("utf-8"))
+        except:
+            pass
 
+    # GUI
     if main_window:
-        main_window.users_signal.emit(display_list)
+        display = []
+        for u, _ in all_users:
+            display.append(("🟢 " if u in online_users else "⚪ ") + u)
+        main_window.users_signal.emit(display)
 
-# ------------------- REGISTER -------------------
+
+# ------------------- REGISTER -------------------handle_login()
 def handle_register(parts, conn):
     if len(parts) < 4:
         conn.sendall(b"REGISTER_FAIL\n")
@@ -121,25 +120,23 @@ def handle_login(parts, conn):
 
         with clients_lock:
             clients[conn] = {"username": username, "avatar": avatar_path}
+            users_snapshot = [
+                f"{info['username']}:{info['avatar']}"
+                for info in clients.values()
+            ]
 
-        # --- gửi LOGIN_OK cho client mới
-        conn.sendall(f"LOGIN_OK|{avatar_path}\n".encode("utf-8"))
+        conn.sendall(f"LOGIN_OK|{avatar_path}\n".encode())
 
-        # Gửi danh sách tất cả user từ DB + trạng thái online
+        # chỉ gọi 1 lần
         send_user_list()
 
-        # --- gửi USER_LIST riêng cho client mới ---
-        users = [f"{info['username']}:{info['avatar']}" for info in clients.values()]
-        conn.sendall(f"USER_LIST|{'|'.join(users)}\n".encode("utf-8"))
-
-        # --- gửi USER_LIST cho tất cả client khác (cập nhật UI) ---
-        with clients_lock:
-            users = [f"{info['username']}:{info['avatar']}" for info in clients.values()]
-            for c in clients.keys():
-                try:
-                    c.sendall(f"USER_LIST|{'|'.join(users)}\n".encode("utf-8"))
-                except:
-                    pass
+        # gửi USER_LIST cho TẤT CẢ (1 lần duy nhất)
+        msg = f"USER_LIST|{'|'.join(users_snapshot)}\n"
+        for c in list(clients.keys()):
+            try:
+                c.sendall(msg.encode())
+            except:
+                pass
 
         # --- gửi danh sách nhóm cho client mới ---
         user_groups = [g for g, mems in groups.items() if username in mems]
@@ -829,6 +826,8 @@ def handle_client(conn, addr):
 
                 elif line.startswith("CALL_STREAM|"):
                     parts = line.split("|", 2)
+                elif line.startswith("VIDEO_STREAM|"):
+                    parts = line.split("|", 3)   # ⭐ QUAN TRỌNG
 
                 else:
                     parts = line.split("|")
@@ -887,13 +886,19 @@ def handle_client(conn, addr):
         print("[ERROR]", e)
         gui_log(f"[ERROR] {e}")
     finally:
+        removed = False
         with clients_lock:
             if conn in clients:
-                print(f"[DISCONNECT] {clients[conn]['username']} left.")
-                gui_log(f"[DISCONNECT] {clients[conn]['username']} left.")
+                username = clients[conn]['username']
                 del clients[conn]
-                send_user_list()
+                removed = True
+
+        if removed:
+            gui_log(f"[DISCONNECT] {username} left.")
+            send_user_list()
+
         conn.close()
+
 
 # ------------------- KHỞI ĐỘNG SERVER -------------------
 server_socket = None  # biến toàn cục để dừng server
